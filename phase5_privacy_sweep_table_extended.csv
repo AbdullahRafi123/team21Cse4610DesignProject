@@ -1,0 +1,9 @@
+Experiment,Clients,IID/Non-IID,DP,Noise Multiplier,Clip Norm,epsilon,Accuracy
+Baseline,5,IID,No,0.0,-,-,0.7665
+DP-1,5,IID,Yes,0.3,1.0,117.42,0.4544
+DP-2,5,IID,Yes,0.5,1.0,17.994,0.4595
+DP-3,5,IID,Yes,1.0,1.0,2.46,0.6589
+DP-4,5,IID,Yes,1.5,1.0,1.284,0.4415
+DP-5,5,IID,Yes,2.0,1.0,0.881,0.3979
+DP-6,5,IID,Yes,3.0,1.0,0.544,0.2221
+DP-7,5,IID,Yes,5.0,1.0,0.309,0.1008
