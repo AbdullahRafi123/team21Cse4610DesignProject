@@ -1,0 +1,2 @@
+round,loss,accuracy,epsilon,run,tag,method,epsilon_target,num_clients,max_colluders,max_stragglers,clip,learning_rate,started_at_utc
+2,2.295837331008911,14.38,6.000000000000007,smoke_lightdp,smoke_lightdp,lightdp,6.0,5,1,1,1.0,1.0,2026-10-08T18:57:35.500857+00:00

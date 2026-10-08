@@ -1,0 +1,8 @@
+Started run smoke_lightdp at 2026-10-08T18:55:40.292037+00:00
+{"cache_dir": ".cache/lightdp_flower", "clip": 1.0, "delta": 1e-05, "device": "auto", "epsilon": 6.0, "feature_batch": 128, "image_size": 224, "learning_rate": 1.0, "max_colluders": 1, "max_records_per_client": 64, "max_stragglers": 1, "method": "lightdp", "microbatch": 16, "momentum": 0.9, "non_iid": false, "num_clients": 5, "num_server_rounds": 2, "output_dir": "results/experiments", "platform": "Linux-6.8.0-142-generic-x86_64-with-glibc2.39", "python": "3.12.3", "seed": 2026, "started_at_utc": "2026-10-08T18:55:40.292037+00:00", "tag": "smoke_lightdp", "torch": "2.14.1+cu130", "use_pretrained": true}
+2026-10-08T18:55:45.245740+00:00 [smoke_lightdp] round=0 loss=2.302987 accuracy=10.09% epsilon=0
+Started run smoke_lightdp at 2026-10-08T18:57:35.500857+00:00
+{"cache_dir": ".cache/lightdp_flower", "clip": 1.0, "delta": 1e-05, "device": "auto", "epsilon": 6.0, "feature_batch": 128, "image_size": 224, "learning_rate": 1.0, "max_colluders": 1, "max_records_per_client": 64, "max_stragglers": 1, "method": "lightdp", "microbatch": 16, "momentum": 0.9, "non_iid": false, "num_clients": 5, "num_server_rounds": 2, "output_dir": "results/experiments", "platform": "Linux-6.8.0-142-generic-x86_64-with-glibc2.39", "python": "3.12.3", "seed": 2026, "started_at_utc": "2026-10-08T18:57:35.500857+00:00", "tag": "smoke_lightdp", "torch": "2.14.1+cu130", "use_pretrained": true}
+2026-10-08T18:57:42.039907+00:00 [smoke_lightdp] round=0 loss=2.302987 accuracy=10.09% epsilon=0
+2026-10-08T18:57:54.162968+00:00 [smoke_lightdp] round=1 loss=2.299502 accuracy=14.49% epsilon=4.1128
+2026-10-08T18:58:00.248791+00:00 [smoke_lightdp] round=2 loss=2.295837 accuracy=14.38% epsilon=6

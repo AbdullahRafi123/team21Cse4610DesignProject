@@ -1,0 +1,3 @@
+round,active_clients,stragglers,learning_rate,mean_client_local_seconds,mean_client_noise_seconds,failures,run
+1,5,0,1.0,0.1514922613994713,0.0015809079999598,0,smoke_lightdp
+2,5,0,0.6000000000000001,0.101858915000048,0.001508768399799,0,smoke_lightdp
