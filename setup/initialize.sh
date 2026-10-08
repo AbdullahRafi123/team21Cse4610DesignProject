@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON:-}"
 
 if [[ -z "$PYTHON_BIN" ]]; then
@@ -22,11 +22,8 @@ if [[ -z "$PYTHON_BIN" ]] || ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 
   exit 1
 fi
 
-VENV_DIR="${VENV_DIR:-.venv}"
-if [[ "$PROJECT_ROOT" == *" "* && "$VENV_DIR" == ".venv" ]]; then
-  VENV_DIR="${HOME}/.venvs/lightdp-flower-project"
-  echo "Project path contains spaces; using $VENV_DIR so Ray can start workers."
-elif [[ "$VENV_DIR" != /* ]]; then
+VENV_DIR="${VENV_DIR:-${HOME}/.venvs/lightdp-flower-project}"
+if [[ "$VENV_DIR" != /* ]]; then
   VENV_DIR="$PROJECT_ROOT/$VENV_DIR"
 fi
 

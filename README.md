@@ -14,16 +14,16 @@ cd team21Cse4610DesignProject
 Run the platform initializer from the repository root. On macOS and Linux:
 
 ```bash
-bash initialize.sh
+bash setup/initialize.sh
 ```
 
 On Windows, install Python 3.10–3.13 and Git, then run:
 
 ```powershell
-.\initialize.bat
+.\setup\initialize.bat
 ```
 
-Each initializer creates a virtual environment if one does not already exist, installs the project and dependencies, and prints the activation command. They do not start training. Windows uses `%USERPROFILE%\.venvs\lightdp-flower-project` by default; macOS/Linux use `.venv` unless the checkout path contains spaces, in which case they use `~/.venvs/lightdp-flower-project` to keep the Ray worker path safe. Activate the environment, then run the quick smoke experiment from the repository root:
+Each initializer creates a virtual environment if one does not already exist, installs the project and dependencies, and prints the activation command. They do not start training. Windows uses `%USERPROFILE%\.venvs\lightdp-flower-project` by default; macOS/Linux use `~/.venvs/lightdp-flower-project`. Keeping environments outside the checkout avoids paths that can interfere with Ray workers. Activate the environment, then run the quick smoke experiment from the repository root:
 
 ```text
 flwr run . --stream
@@ -31,7 +31,15 @@ flwr run . --stream
 
 The first run may download CIFAR-10 and pretrained weights.
 
-To choose a particular supported Python interpreter, set `PYTHON` before running the initializer, for example `PYTHON=python3.11 bash initialize.sh` on macOS/Linux or `set "PYTHON=py -3.13"` before running `initialize.bat` on Windows. Supported versions are 3.10–3.13; an existing environment with a different version is left untouched and the initializer explains how to select a new `VENV_DIR`.
+To choose a particular supported Python interpreter, set `PYTHON` before running the initializer, for example `PYTHON=python3.11 bash setup/initialize.sh` on macOS/Linux or `set "PYTHON=py -3.13"` before running `setup\initialize.bat` on Windows. Supported versions are 3.10–3.13; an existing environment with a different version is left untouched and the initializer explains how to select a new `VENV_DIR`.
+
+### Click to run
+
+The launchers initialize the virtual environment if needed, then start the default Flower smoke run and keep the terminal open to show its output:
+
+- Windows: double-click [`launchers/run_windows.bat`](launchers/run_windows.bat).
+- macOS: double-click [`launchers/run_macos.command`](launchers/run_macos.command). If macOS blocks it, open Terminal in the repository and run `bash launchers/run_unix.sh`.
+- Linux: double-click [`launchers/run_linux.sh`](launchers/run_linux.sh) when the file manager is set to run executable scripts, or run `bash launchers/run_unix.sh` in a terminal.
 
 ## Experiments
 
@@ -106,6 +114,8 @@ python -m lightdp_fl.prepare_data
 ## Project layout
 
 - `src/lightdp_fl/`: client/server applications, model, data, privacy, training, and aggregation modules.
+- `setup/`: platform initializers and the Windows redundancy-check wrapper.
+- `launchers/`: platform-specific clickable smoke-run entry points plus their shared Unix launcher.
 - `configs/`: full experiment configurations.
 - `scripts/`: experiment runners and result collection.
 - `notebooks/`: methodology and source notebooks; older notebooks are in `notebooks/archive/`.
@@ -114,7 +124,7 @@ python -m lightdp_fl.prepare_data
 
 ## Check for repository redundancies
 
-Run `check_redundancies.bat` on Windows or `python scripts/check_redundancies.py` on macOS/Linux. The dependency-free checker reports byte-identical files, repeated top-level Python declarations, and broken local Markdown links. It never removes or edits files; review each finding before changing the repository. Add `--strict` to return a failure exit code when findings exist, or `--include-outputs` to include generated experiment and summary directories.
+Run `setup\check_redundancies.bat` on Windows or `python scripts/check_redundancies.py` on macOS/Linux. The dependency-free checker reports byte-identical files, repeated top-level Python declarations, and broken local Markdown links. It never removes or edits files; review each finding before changing the repository. Add `--strict` to return a failure exit code when findings exist, or `--include-outputs` to include generated experiment and summary directories.
 
 The `lightdp` method simulates pairwise masks using matching seeds; it is not production key exchange. `smpc_dp` is an ideal secure-aggregation baseline, not a real cryptographic transport implementation. The notebooks document earlier experiments and may not use the active Flower code.
 

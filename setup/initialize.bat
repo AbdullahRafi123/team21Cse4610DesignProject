@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0" || exit /b 1
+cd /d "%~dp0.." || exit /b 1
 set "PROJECT_ROOT=%CD%"
 
 if not defined PYTHON (
