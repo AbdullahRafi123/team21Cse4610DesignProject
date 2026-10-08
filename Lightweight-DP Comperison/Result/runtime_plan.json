@@ -1,0 +1,11 @@
+{
+  "main_rounds": 8,
+  "sweep_rounds": 3,
+  "estimated_round_seconds": 46.45134526767116,
+  "predicted_training_minutes": 85.16079965739712,
+  "microbatch": 32,
+  "main_images_per_method": 400000,
+  "main_record_passes": 8,
+  "feature_preparation_minutes": 5.573547688816668,
+  "planned_total_minutes": 106.20099032939711
+}

@@ -1,0 +1,44 @@
+================================================================
+CIFAR-10 | clients=10 rounds=20 local_epochs=2 batch=128
+SiLU CNN | SGD(lr=0.05, mom=0.9) | normalised + augmented
+
+NOTE: eps values are PER-RELEASE Gaussian calibrations.
+No composition accounting across rounds is performed.
+Attack is DLG (dummy label optimised, not analytically inferred).
+Adaptive arm is ALDP-FL-INSPIRED: its threshold derives from
+unprivatised gradient norms and is not separately accounted.
+================================================================
+
+EXP 1 -- reconstruction at round 1
+Setting                      MSE        SSIM
+--------------------------------------------
+No DP                     0.0000      1.0000
+Fixed eps=600             0.0533      0.4154
+Fixed eps=200             0.2468      0.0234
+Fixed eps=60              0.2906     -0.0059
+Adapt eps=600             0.0223      0.5908
+Adapt eps=200             0.0423      0.3480
+Adapt eps=60              0.2709      0.0174
+
+EXP 2 -- same attack at round 20
+Round 1                   0.0000      1.0000
+Round 20                  0.2019      0.0126
+
+EXP 3 -- accumulated update, plain SGD
+Accumulated               0.2739      0.0075
+
+EXP 4 -- final test accuracy
+No DP                         0.6715
+adaptive eps=600              0.6475
+fixed eps=600                 0.5755
+adaptive eps=200              0.5025
+fixed eps=200                 0.5355
+
+EXP 5 -- overhead
+                               DP call    full round
+No DP                                -       15.148s
+adaptive eps=600              1775.1us       15.151s
+fixed eps=600                 1016.8us       15.012s
+adaptive eps=200              1798.3us       15.200s
+fixed eps=200                 1012.8us       15.140s
+================================================================
