@@ -53,6 +53,31 @@ python scripts/run_sweeps.py
 python scripts/collect_results.py
 ```
 
+#### Run on a CUDA GPU (Linux or Windows)
+
+The default `local-simulation` federation reserves no GPUs, so it remains usable on CPU-only machines. For a CUDA-capable machine, install a CUDA-enabled PyTorch build that matches its NVIDIA driver using the [official PyTorch install selector](https://pytorch.org/get-started/locally/), then verify it from the project environment:
+
+```bash
+python -c 'import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No CUDA GPU")'
+```
+
+The project includes a `local-simulation-gpu` federation profile. It reserves 0.5 GPU per client worker (up to two concurrent workers per GPU). Run one experiment with:
+
+```bash
+flwr run . local-simulation-gpu --stream --run-config \
+  'method="lightdp" epsilon=6.0 tag="gpu_lightdp_eps6" num-clients=50 num-server-rounds=8 max-colluders=10 max-stragglers=10 max-records-per-client=0 microbatch=32 non-iid=false use-pretrained=true device="cuda"' \
+  --federation-config "options.num-supernodes=50"
+```
+
+For the complete main comparison or sweep suite, pass `--gpu` to the existing scripts:
+
+```bash
+python scripts/run_main_suite.py --gpu
+python scripts/run_sweeps.py --gpu
+```
+
+The scripts explicitly select CUDA in GPU mode and fail early if CUDA-enabled PyTorch or a visible GPU is missing. GPU reservations are scheduling hints, not VRAM limits. Set `options.backend.client-resources.num-gpus=1.0` in the GPU profile to run one worker per GPU if memory is constrained. Native Windows simulation support through Ray is experimental; Linux is recommended for GPU simulations.
+
 ### Resume an interrupted run
 
 Every completed communication round saves the global parameters and optimizer momentum. Continue
@@ -62,6 +87,8 @@ checkpoint:
 ```bash
 python scripts/resume_run.py --tag my_run
 ```
+
+For a run started with the GPU profile, add `--gpu` when resuming: `python scripts/resume_run.py --tag my_run --gpu`.
 
 Keep the experiment settings and total `num-server-rounds` unchanged. A checkpoint already at the
 target round cannot continue training. Runs are machine-local: the resume helper and server reject a

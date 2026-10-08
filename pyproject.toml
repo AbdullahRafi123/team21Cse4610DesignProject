@@ -87,3 +87,10 @@ options.backend.client-resources.num-cpus = 1
 # CPU-only default: fractional GPU reservations make Ray reject the pool when
 # running on a machine without a CUDA GPU.
 options.backend.client-resources.num-gpus = 0
+
+# Opt in on CUDA-capable machines with:
+# flwr run . local-simulation-gpu --federation-config "options.num-supernodes=50"
+[tool.flwr.federations.local-simulation-gpu]
+options.num-supernodes = 5
+options.backend.client-resources.num-cpus = 1
+options.backend.client-resources.num-gpus = 0.5

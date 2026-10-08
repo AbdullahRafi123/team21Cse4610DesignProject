@@ -51,6 +51,10 @@ def main() -> None:
         description="Continue a saved run using its original settings and checkpoint."
     )
     parser.add_argument("--tag", required=True, help="Run tag/output folder to resume")
+    parser.add_argument(
+        "--gpu", action="store_true",
+        help="Resume with the CUDA simulation profile (requires CUDA-enabled PyTorch).",
+    )
     args = parser.parse_args()
 
     experiments_dir = PROJECT_ROOT / "results" / "experiments"
@@ -88,8 +92,9 @@ def main() -> None:
     )
     config += " resume=true"
     num_clients = int(metadata["num_clients"])
+    federation = "local-simulation-gpu" if args.gpu else "local-simulation"
     command = [
-        "flwr", "run", ".", "local-simulation", "--stream",
+        "flwr", "run", ".", federation, "--stream",
         "--run-config", config,
         "--federation-config", f"options.num-supernodes={num_clients}",
     ]

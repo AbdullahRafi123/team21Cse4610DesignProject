@@ -24,14 +24,17 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument("--rounds",type=int,default=3)
     p.add_argument("--run-id", help="Optional output prefix. Defaults to the current UTC timestamp.")
+    p.add_argument("--gpu", action="store_true", help="Use the CUDA simulation profile (requires CUDA-enabled PyTorch).")
     args=p.parse_args()
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    federation = "local-simulation-gpu" if args.gpu else "local-simulation"
+    device = "cuda" if args.gpu else "auto"
     for name,changes in SWEEPS:
         base={"method":"lightdp","epsilon":6.0,"tag":f"{run_id}_Sweep_{name}","num-clients":50,"num-server-rounds":args.rounds,
-              "max-colluders":10,"max-stragglers":10,"max-records-per-client":0,"microbatch":32,"non-iid":False}
+              "max-colluders":10,"max-stragglers":10,"max-records-per-client":0,"microbatch":32,"non-iid":False,"device":device}
         base.update(changes);N=int(base["num-clients"])
         cfg=" ".join(f'{k}={toml(v)}' for k,v in base.items())
-        cmd=["flwr","run",".","local-simulation","--run-config",cfg,"--federation-config",f"options.num-supernodes={N}","--stream"]
+        cmd=["flwr","run",".",federation,"--run-config",cfg,"--federation-config",f"options.num-supernodes={N}","--stream"]
         print("\nRUNNING:"," ".join(cmd),flush=True);subprocess.run(cmd,check=True,cwd=PROJECT_ROOT)
     subprocess.run([sys.executable,str(PROJECT_ROOT / "scripts/collect_results.py")],check=True,cwd=PROJECT_ROOT)
 
