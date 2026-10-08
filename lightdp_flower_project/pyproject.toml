@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lightdp-flower"
+version = "1.0.0"
+description = "Flower implementation of the LightDP-FL CIFAR-10 comparison notebook"
+license = "MIT"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "flwr[simulation]>=1.20.0,<1.26.0",
+  "torch>=2.2",
+  "torchvision>=0.17",
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "pandas>=2.0",
+  "matplotlib>=3.8",
+  "scikit-image>=0.22",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["lightdp_fl"]
+
+[tool.flwr.app]
+publisher = "adnan"
+
+[tool.flwr.app.components]
+serverapp = "lightdp_fl.server_app:app"
+clientapp = "lightdp_fl.client_app:app"
+
+# Safe smoke-test defaults. The source notebook's measured run used 50 clients,
+# 8 main rounds and 3 sweep rounds. Use configs/full_lightdp.toml or the suite scripts.
+[tool.flwr.app.config]
+seed = 2026
+num-clients = 5
+num-server-rounds = 2
+max-colluders = 1
+max-stragglers = 1
+epsilon = 6.0
+delta = 0.00001
+clip = 1.0
+learning-rate = 1.0
+momentum = 0.9
+image-size = 224
+feature-batch = 128
+microbatch = 16
+method = "lightdp"
+non-iid = false
+max-records-per-client = 64
+use-pretrained = true
+cache-dir = ".cache/lightdp_flower"
+output-dir = "results"
+tag = "smoke_lightdp"
+device = "auto"
+
+[tool.flwr.federations]
+default = "local-simulation"
+
+[tool.flwr.federations.local-simulation]
+options.num-supernodes = 5
+options.backend.client-resources.num-cpus = 1
+# CPU-only default: fractional GPU reservations make Ray reject the pool when
+# running on a machine without a CUDA GPU.
+options.backend.client-resources.num-gpus = 0

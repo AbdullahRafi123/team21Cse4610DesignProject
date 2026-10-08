@@ -1,0 +1,25 @@
+# Python environments and bytecode
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build and package artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Local data, caches, and experiment outputs
+.cache/
+results/
+*.pt
+*.pth
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
