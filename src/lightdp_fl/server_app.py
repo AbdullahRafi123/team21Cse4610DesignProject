@@ -1,7 +1,9 @@
 from __future__ import annotations
 import csv
 import json
+from importlib import metadata
 import platform
+import subprocess
 import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -24,6 +26,45 @@ def _records_per_client(cfg: RunConfig) -> int:
     return min(full, cfg.max_records_per_client) if cfg.max_records_per_client > 0 else full
 
 
+def _source_provenance() -> dict[str, str | bool | None]:
+    """Return Git revision and dirty-state when the run comes from a checkout."""
+    try:
+        revision = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        dirty = bool(
+            subprocess.run(
+                ["git", "status", "--porcelain"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        )
+        return {"git_revision": revision, "git_worktree_dirty": dirty}
+    except (OSError, subprocess.CalledProcessError):
+        return {"git_revision": None, "git_worktree_dirty": None}
+
+
+def _dependency_versions() -> dict[str, str]:
+    distributions = (
+        "flwr",
+        "torch",
+        "torchvision",
+        "numpy",
+        "scipy",
+        "pandas",
+        "matplotlib",
+        "scikit-image",
+    )
+    return {
+        package: metadata.version(package)
+        for package in distributions
+    }
+
+
 def server_fn(context: Context) -> ServerAppComponents:
     cfg = RunConfig.from_mapping(context.run_config)
     cfg.validate()
@@ -34,7 +75,21 @@ def server_fn(context: Context) -> ServerAppComponents:
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "python": sys.version.split()[0],
         "platform": platform.platform(),
-        "torch": torch.__version__,
+        "machine": platform.machine(),
+        "processor": platform.processor() or None,
+        "dependencies": _dependency_versions(),
+        "cuda_version": torch.version.cuda,
+        "cuda_device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "dataset": {
+            "name": "CIFAR-10",
+            "source": "https://www.cs.toronto.edu/~kriz/cifar.html",
+            "train_examples": 50000,
+            "test_examples": 10000,
+        },
+        "pretrained_backbone": (
+            "torchvision ResNet18_Weights.IMAGENET1K_V1" if cfg.use_pretrained else None
+        ),
+        **_source_provenance(),
     }
     run_config_path.write_text(json.dumps(run_metadata, indent=2) + "\n", encoding="utf-8")
     training_log = cfg.run_output_dir / "training.log"

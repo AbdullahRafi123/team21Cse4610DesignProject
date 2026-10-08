@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as: CSE4610 Team 21 (2026), LightDP-FL CIFAR-10 experiments."
+title: "LightDP-FL CIFAR-10 experiments"
+type: software
+authors:
+  - name: "CSE4610 Team 21"
+version: "1.0.0"
+license: MIT
+repository-code: "https://github.com/AbdullahRafi123/team21Cse4610DesignProject"

@@ -58,3 +58,13 @@ python -m lightdp_fl.prepare_data
 - `results/experiments/`: new Flower runs and their trackable logs.
 
 The `lightdp` method simulates pairwise masks using matching seeds; it is not production key exchange. `smpc_dp` is an ideal secure-aggregation baseline, not a real cryptographic transport implementation. The notebooks document earlier experiments and may not use the active Flower code.
+
+## Research use and citation
+
+Archived measurements are historical notebook outputs. The current smoke configuration checks execution and logging only; it does not reproduce the archived paper-style results. Follow the [research standards](docs/RESEARCH_STANDARDS.md) and record a protocol from the [experiment template](docs/EXPERIMENT_PROTOCOL_TEMPLATE.md) before presenting new confirmatory findings. Repository agents should follow [AGENTS.md](AGENTS.md).
+
+The project uses CIFAR-10 and torchvision's pretrained ResNet-18 weights. Cite the [CIFAR-10 dataset and technical report](https://www.cs.toronto.edu/~kriz/cifar.html) and record the exact [ResNet-18 weight variant](https://docs.pytorch.org/vision/main/models/generated/torchvision.models.resnet18.html) used. Software citation metadata is in [CITATION.cff](CITATION.cff); the full author list and contribution order must be confirmed by the team before a paper release.
+
+## License
+
+The source code is released under the MIT License in [LICENSE](LICENSE). Dataset and pretrained-weight terms remain those of their respective providers.

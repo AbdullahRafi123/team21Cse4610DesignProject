@@ -6,8 +6,19 @@ build-backend = "hatchling.build"
 name = "lightdp-flower"
 version = "1.0.0"
 description = "Flower implementation of the LightDP-FL CIFAR-10 comparison notebook"
+readme = "README.md"
 license = "MIT"
+authors = [{ name = "CSE4610 Team 21" }]
 requires-python = ">=3.10,<3.13"
+keywords = ["federated-learning", "differential-privacy", "research"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
 dependencies = [
   "flwr[simulation]>=1.20.0,<1.26.0",
   "torch>=2.2",
@@ -19,11 +30,15 @@ dependencies = [
   "scikit-image>=0.22",
 ]
 
+[project.urls]
+Repository = "https://github.com/AbdullahRafi123/team21Cse4610DesignProject"
+Documentation = "https://github.com/AbdullahRafi123/team21Cse4610DesignProject/blob/main/docs/RESEARCH_STANDARDS.md"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/lightdp_fl"]
 
 [tool.flwr.app]
-publisher = "adnan"
+publisher = "team21"
 
 [tool.flwr.app.components]
 serverapp = "lightdp_fl.server_app:app"

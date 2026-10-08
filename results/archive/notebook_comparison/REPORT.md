@@ -1,4 +1,6 @@
-# Expanded CIFAR-10 / LightDP-FL measured report
+# Archived notebook measurements: CIFAR-10 / LightDP-FL
+
+> Historical output from the cached source notebook, retained for provenance. It has not been independently reproduced from the current Flower package. Treat these values as historical measurements, not as results from the current code or publication-ready evidence. See the repository's [research standards](../../../docs/RESEARCH_STANDARDS.md) before citing or extending them.
 
 Training images: 50,000; test images: 10,000. Main clients: 50; records/client: 1000.
 Main rounds completed: 8/8; sweep rounds: 3/3.
