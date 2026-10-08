@@ -1,25 +1,28 @@
-# Python environments and bytecode
+# Python environments, bytecode, and packaging output
 .venv/
+**/.venv/
 venv/
 env/
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Build and package artifacts
 build/
 dist/
 *.egg-info/
 .eggs/
 
-# Local data, caches, and experiment outputs
+# Local datasets, model checkpoints, caches, and Flower/Ray state
 .cache/
-results/
+data/
 *.pt
 *.pth
+.ray/
+ray_results/
 
 # Editor and operating-system files
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+.env
+.env.*
