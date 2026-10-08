@@ -16,30 +16,35 @@ def main() -> None:
     histories: list[pd.DataFrame] = []
     train_rounds: list[pd.DataFrame] = []
 
-    for folder in sorted(RUNS_DIR.glob("*")):
+    for config_path in sorted(RUNS_DIR.rglob("run_config.json")):
+        folder = config_path.parent
         history_path = folder / "history.csv"
-        config_path = folder / "run_config.json"
-        if not history_path.is_file() or not config_path.is_file():
+        if not history_path.is_file():
             continue
 
         history = pd.read_csv(history_path)
         if history.empty:
             continue
         config = json.loads(config_path.read_text(encoding="utf-8"))
-        history["run"] = folder.name
+        run_key = folder.relative_to(RUNS_DIR).as_posix()
+        history["run"] = run_key
         histories.append(history)
 
         train_path = folder / "train_rounds.csv"
         if train_path.is_file():
             train = pd.read_csv(train_path)
-            train["run"] = folder.name
+            train["run"] = run_key
             train_rounds.append(train)
 
         last = history.iloc[-1].to_dict()
         last.update(
             {
-                "run": folder.name,
+                "run": run_key,
                 "tag": config.get("tag", folder.name),
+                "run_id": config.get("run_id"),
+                "run_number": config.get("run_number"),
+                "machine_id": config.get("machine_id"),
+                "hostname": config.get("hostname"),
                 "method": config["method"],
                 "epsilon_target": config.get("epsilon"),
                 "num_clients": config["num_clients"],

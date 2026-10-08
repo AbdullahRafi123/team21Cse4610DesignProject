@@ -16,7 +16,7 @@ Use smoke runs only to verify software operation. Label exploratory sweeps as ex
 
 ## 2. Make results reproducible
 
-Each run must retain its exact effective configuration and provenance in `results/experiments/<run-id>/`. Keep the run tag unique and record:
+Each run must retain its exact effective configuration and provenance in `results/experiments/<machine-id>/<tag>/`. Run outputs and resumable checkpoints are machine-local; do not continue or copy a checkpoint to another machine. Keep the run tag unique on each machine and record:
 
 - Git commit/revision, code changes, Python and dependency versions, operating system, hardware, and accelerator details when relevant.
 - Dataset source/version, license, split and partition procedure, preprocessing, and any downloaded or pretrained assets and their version.

@@ -5,6 +5,8 @@ from pathlib import Path
 import re
 from typing import Any, Literal, Mapping, cast
 
+from .run_tracking import machine_id
+
 Method = Literal["no_dp", "vanilla_dp", "smpc_dp", "lightdp"]
 
 @dataclass(frozen=True)
@@ -65,7 +67,22 @@ class RunConfig:
 
     @property
     def run_output_dir(self) -> Path:
-        return Path(self.output_dir).expanduser().resolve() / self.tag
+        output_root = Path(self.output_dir).expanduser().resolve()
+        machine_run_dir = output_root / machine_id() / self.tag
+        legacy_run_dir = output_root / self.tag
+        # Let existing pre-partition runs resume in place on their originating machine.
+        if (
+            self.resume
+            and not (machine_run_dir / "run_config.json").is_file()
+            and (legacy_run_dir / "run_config.json").is_file()
+        ):
+            return legacy_run_dir
+        return machine_run_dir
+
+    @property
+    def checkpoint_dir(self) -> Path:
+        """Keep binary artifacts isolated inside their experiment's output folder."""
+        return self.run_output_dir / "checkpoints"
 
     def validate(self) -> None:
         methods = {"no_dp", "vanilla_dp", "smpc_dp", "lightdp"}

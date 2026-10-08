@@ -4,29 +4,34 @@ This repository contains a Flower simulation of the LightDP federated learning c
 
 ## Set up after cloning
 
-Requires Python 3.10–3.12 and internet access for the first CIFAR-10 and pretrained ResNet downloads.
+Requires Python 3.10–3.13 and internet access for the first CIFAR-10 and pretrained ResNet downloads. The initializers prefer Python 3.12 when available and accept a `PYTHON` override to select another supported interpreter.
 
 ```bash
 git clone https://github.com/AbdullahRafi123/team21Cse4610DesignProject.git
 cd team21Cse4610DesignProject
+```
+
+Run the platform initializer from the repository root. On macOS and Linux:
+
+```bash
 bash initialize.sh
 ```
 
-The initializer creates an environment and installs the project. It does not start training. Activate the environment using the command printed by the initializer, then run the quick smoke experiment:
-
-```bash
-flwr run . --stream
-```
-
-On Windows, install Python 3.10–3.12 and Git, then run this from PowerShell in the cloned repository:
+On Windows, install Python 3.10–3.13 and Git, then run:
 
 ```powershell
-git clone https://github.com/AbdullahRafi123/team21Cse4610DesignProject.git
-cd team21Cse4610DesignProject
 .\initialize.bat
 ```
 
-The Windows initializer creates the environment at `%USERPROFILE%\.venvs\lightdp-flower-project` (or uses `VENV_DIR` if set), installs the project, and prints activation commands for PowerShell and Command Prompt. Activate it, then run `flwr run . --stream` from the repository directory. On either platform, the first run may download CIFAR-10 and pretrained weights. On Linux, if the checkout path contains spaces, the initializer places the environment under `~/.venvs/lightdp-flower-project` so Ray can launch workers.
+Each initializer creates a virtual environment if one does not already exist, installs the project and dependencies, and prints the activation command. They do not start training. Windows uses `%USERPROFILE%\.venvs\lightdp-flower-project` by default; macOS/Linux use `.venv` unless the checkout path contains spaces, in which case they use `~/.venvs/lightdp-flower-project` to keep the Ray worker path safe. Activate the environment, then run the quick smoke experiment from the repository root:
+
+```text
+flwr run . --stream
+```
+
+The first run may download CIFAR-10 and pretrained weights.
+
+To choose a particular supported Python interpreter, set `PYTHON` before running the initializer, for example `PYTHON=python3.11 bash initialize.sh` on macOS/Linux or `set "PYTHON=py -3.13"` before running `initialize.bat` on Windows. Supported versions are 3.10–3.13; an existing environment with a different version is left untouched and the initializer explains how to select a new `VENV_DIR`.
 
 ## Experiments
 
@@ -42,18 +47,19 @@ python scripts/collect_results.py
 
 ### Resume an interrupted run
 
-Rerun the same command and configuration, keeping the output `tag` and total
-`num-server-rounds` unchanged, and add `resume=true`. For example:
+Every completed communication round saves the global parameters and optimizer momentum. Continue
+an interrupted run by tag; the helper reads its recorded configuration and resumes from the latest
+checkpoint:
 
 ```bash
-flwr run . local-simulation --stream \
-  --run-config 'method="lightdp" epsilon=6.0 tag="my_run" num-clients=50 num-server-rounds=8 max-colluders=10 max-stragglers=10 max-records-per-client=0 microbatch=32 non-iid=false resume=true' \
-  --federation-config "options.num-supernodes=50"
+python scripts/resume_run.py --tag my_run
 ```
 
-The server restores global parameters, momentum, and the completed round from the ignored
-`server_checkpoint.pt` in that run's output directory. Keep the experiment settings and total
-round count unchanged. A checkpoint at or beyond the target round cannot continue training.
+Keep the experiment settings and total `num-server-rounds` unchanged. A checkpoint already at the
+target round cannot continue training. Runs are machine-local: the resume helper and server reject a
+checkpoint whose machine ID differs from the current machine. Start a fresh run on each machine;
+do not copy checkpoints between machines. Data and pretrained weights can be downloaded again or
+copied from the local cache.
 
 ### Benchmark optional training modes
 
@@ -76,15 +82,20 @@ pip install -e '.[test]'
 python -m pytest
 ```
 
-Suite and sweep scripts add a UTC timestamp to run names, so a new run does not overwrite an earlier one. Outputs are organized under `results/experiments/<run-id>/`:
+Suite and sweep scripts add a UTC timestamp to run names. Outputs are organized under `results/experiments/<machine-id>/<tag>/`:
 
-- `run_config.json` records parameters and basic environment details.
+- `run_config.json` records parameters, a UTC run ID, machine ID, machine-local run number, hostname, OS/architecture, and available CUDA devices.
 - `history.csv` records loss, accuracy, and privacy accounting per round.
 - `train_rounds.csv` records active clients, simulated stragglers, learning rate, and client timing.
 - `training.log` records run start and round summaries.
-- `model.pt` stores the final global model checkpoint and is excluded from Git.
+- `checkpoints/server_checkpoint.pt` stores that machine's latest resumable global parameters and momentum.
+- `checkpoints/final_model.pt` stores its final model state; `.pt` files are excluded from Git.
 
-Training logs and small tabular summaries are intentionally Git-trackable for reproducibility. Review and commit the relevant `run_config.json`, `history.csv`, `train_rounds.csv`, and `training.log` files after an experiment. `results/summary/` contains combined CSVs and plots generated by the collector. Local datasets and caches live under `.cache/` and are ignored.
+Each new run gets an ID such as `20261009T120000Z_host-linux-x86_64-a1b2c3d4_run0007_9f8e7d6c`. Outputs are partitioned under `results/experiments/<machine-id>/<tag>/`, so equal tags on different machines stay separate when results are collected together. A stable machine ID and its sequence are stored in the user's cache directory (`~/.cache/lightdp_flower/` on Linux/macOS or `%LOCALAPPDATA%\lightdp_flower\` on Windows), so they persist across repository pulls without adding machine-specific state to Git. Resume events record the machine and sequence used to continue a run.
+
+At startup, the server and each client process check `torch.cuda.is_available()`, list visible GPUs, and log the selected device. With `device="auto"` the process uses CUDA when available and otherwise logs that it selected CPU. An explicitly requested CUDA device stops early with a clear error if CUDA is unavailable or the requested GPU index is not visible.
+
+Training logs and small tabular summaries are intentionally Git-trackable for reproducibility. Review and commit the relevant `run_config.json`, `history.csv`, `train_rounds.csv`, and `training.log` files after an experiment. `results/summary/all_runs.csv` includes run ID, machine ID, hostname, and run number so collected results can be compared across machines. Use a distinct `tag` for separate experiments on one machine; machine IDs partition outputs across machines. Local datasets, caches, machine IDs, and run-number counters are excluded from Git.
 
 To pre-download data and model weights without training:
 
@@ -99,7 +110,11 @@ python -m lightdp_fl.prepare_data
 - `scripts/`: experiment runners and result collection.
 - `notebooks/`: methodology and source notebooks; older notebooks are in `notebooks/archive/`.
 - `results/archive/`: retained historical tables, logs, and figures grouped by experiment.
-- `results/experiments/`: new Flower runs and their trackable logs.
+- `results/experiments/<machine-id>/<tag>/`: machine-partitioned Flower runs and their trackable logs/checkpoint directories.
+
+## Check for repository redundancies
+
+Run `check_redundancies.bat` on Windows or `python scripts/check_redundancies.py` on macOS/Linux. The dependency-free checker reports byte-identical files, repeated top-level Python declarations, and broken local Markdown links. It never removes or edits files; review each finding before changing the repository. Add `--strict` to return a failure exit code when findings exist, or `--include-outputs` to include generated experiment and summary directories.
 
 The `lightdp` method simulates pairwise masks using matching seeds; it is not production key exchange. `smpc_dp` is an ideal secure-aggregation baseline, not a real cryptographic transport implementation. The notebooks document earlier experiments and may not use the active Flower code.
 

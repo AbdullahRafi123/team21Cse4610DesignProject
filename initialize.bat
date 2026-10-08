@@ -3,11 +3,16 @@ setlocal
 cd /d "%~dp0" || exit /b 1
 set "PROJECT_ROOT=%CD%"
 
-if not defined PYTHON set "PYTHON=py -3.11"
-%PYTHON% -c "import sys; raise SystemExit(0 if (3,10) <= sys.version_info[:2] < (3,13) else 1)" >nul 2>&1
+if not defined PYTHON (
+  for %%V in (3.12 3.11 3.13 3.10) do (
+    py -%%V -c "import sys; raise SystemExit(0 if (3,10) <= sys.version_info[:2] < (3,14) else 1)" >nul 2>&1
+    if not errorlevel 1 if not defined PYTHON set "PYTHON=py -%%V"
+  )
+)
+%PYTHON% -c "import sys; raise SystemExit(0 if (3,10) <= sys.version_info[:2] < (3,14) else 1)" >nul 2>&1
 if errorlevel 1 (
-  echo Python 3.10, 3.11, or 3.12 is required.
-  echo Set PYTHON to an installed interpreter, for example: set "PYTHON=py -3.12"
+  echo Python 3.10, 3.11, 3.12, or 3.13 is required.
+  echo Set PYTHON to an installed interpreter, for example: set "PYTHON=py -3.13"
   exit /b 1
 )
 
@@ -22,6 +27,13 @@ if errorlevel 1 (
 if not exist "%VENV_DIR%\Scripts\python.exe" (
   %PYTHON% -m venv "%VENV_DIR%"
   if errorlevel 1 exit /b 1
+)
+
+"%VENV_DIR%\Scripts\python.exe" -c "import sys; raise SystemExit(0 if (3,10) <= sys.version_info[:2] < (3,14) else 1)" >nul 2>&1
+if errorlevel 1 (
+  echo Existing virtual environment uses an unsupported Python version.
+  echo Remove "%VENV_DIR%" or set VENV_DIR to a new path, then rerun initialize.bat.
+  exit /b 1
 )
 
 "%VENV_DIR%\Scripts\python.exe" -m pip install --upgrade pip

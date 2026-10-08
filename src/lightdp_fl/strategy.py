@@ -17,6 +17,7 @@ from flwr.server.strategy import FedAvg
 from .config import RunConfig
 from .model import HybridClassifier, arrays_to_flat, flat_to_arrays
 from .privacy import Calibration, eps_from_rho
+from .run_tracking import machine_id
 
 
 class GradientMomentumStrategy(FedAvg):
@@ -26,7 +27,10 @@ class GradientMomentumStrategy(FedAvg):
         self.model_template = HybridClassifier()
         self.out = cfg.run_output_dir
         self.out.mkdir(parents=True, exist_ok=True)
-        self.checkpoint_path = self.out / "server_checkpoint.pt"
+        self.checkpoint_dir = cfg.checkpoint_dir
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self.checkpoint_path = self.checkpoint_dir / "server_checkpoint.pt"
+        self.legacy_checkpoint_path = self.out / "server_checkpoint.pt"
         self.resume_round = 0
 
         if cfg.resume:
@@ -58,13 +62,25 @@ class GradientMomentumStrategy(FedAvg):
         self._write_metadata()
 
     def _load_checkpoint(self, cfg: RunConfig) -> dict[str, Any]:
-        if not self.checkpoint_path.is_file():
+        checkpoint_path = (
+            self.checkpoint_path
+            if self.checkpoint_path.is_file()
+            else self.legacy_checkpoint_path
+        )
+        if not checkpoint_path.is_file():
             raise FileNotFoundError(
                 f"Resume was requested but no checkpoint exists at {self.checkpoint_path}"
             )
-        checkpoint = torch.load(self.checkpoint_path, map_location="cpu", weights_only=True)
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
         if checkpoint.get("schema_version") != 1:
             raise ValueError("Unsupported or incomplete server checkpoint schema")
+        checkpoint_machine_id = checkpoint.get("machine_id")
+        if checkpoint_machine_id != machine_id():
+            raise RuntimeError(
+                "This checkpoint can only be resumed on its originating machine. "
+                f"Checkpoint machine_id={checkpoint_machine_id!r}; "
+                f"current machine_id={machine_id()!r}. Start a new run on this machine."
+            )
         expected_config = asdict(cfg)
         expected_config.pop("resume", None)
         if checkpoint.get("config") != expected_config:
@@ -87,6 +103,7 @@ class GradientMomentumStrategy(FedAvg):
     def _save_checkpoint(self, server_round: int) -> None:
         checkpoint = {
             "schema_version": 1,
+            "machine_id": machine_id(),
             "round": server_round,
             "parameters": self.current.detach().cpu(),
             "velocity": self.velocity.detach().cpu(),

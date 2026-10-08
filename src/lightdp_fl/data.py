@@ -19,9 +19,33 @@ STD = torch.tensor([0.229, 0.224, 0.225])[None, :, None, None]
 
 
 def resolve_device(name: str) -> torch.device:
+    cuda_available = torch.cuda.is_available()
     if name == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return torch.device(name)
+        selected = "cuda" if cuda_available else "cpu"
+    else:
+        selected = name
+    if selected.startswith("cuda") and not cuda_available:
+        raise RuntimeError(
+            f"CUDA was requested with device={name!r}, but torch.cuda.is_available() is false. "
+            "Install a CUDA-enabled PyTorch build and check the GPU driver, or use device=auto/cpu."
+        )
+    device = torch.device(selected)
+    if device.type == "cuda" and device.index is not None and device.index >= torch.cuda.device_count():
+        raise RuntimeError(
+            f"CUDA device index {device.index} was requested, but only "
+            f"{torch.cuda.device_count()} CUDA device(s) are visible."
+        )
+    visible_gpus = (
+        [torch.cuda.get_device_name(index) for index in range(torch.cuda.device_count())]
+        if cuda_available
+        else []
+    )
+    print(
+        f"CUDA check: available={cuda_available}; visible_devices={visible_gpus}; "
+        f"selected_device={device}",
+        flush=True,
+    )
+    return device
 
 
 def dataset_root(cfg: RunConfig) -> Path:

@@ -9,7 +9,7 @@ description = "Flower implementation of the LightDP-FL CIFAR-10 comparison noteb
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "CSE4610 Team 21" }]
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10,<3.14"
 keywords = ["federated-learning", "differential-privacy", "research"]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -18,6 +18,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
   "flwr[simulation]>=1.20.0,<1.26.0",

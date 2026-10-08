@@ -2,7 +2,6 @@ from __future__ import annotations
 import csv
 import json
 from importlib import metadata
-import platform
 import subprocess
 import sys
 from dataclasses import asdict
@@ -17,6 +16,7 @@ from .config import RunConfig
 from .data import load_test_data, resolve_device
 from .model import HybridClassifier, get_parameters, set_parameters
 from .privacy import calibrate, eps_from_rho
+from .run_tracking import machine_identity, new_run_identity
 from .strategy import GradientMomentumStrategy
 from .training import evaluate_global
 
@@ -68,35 +68,61 @@ def _dependency_versions() -> dict[str, str]:
 def server_fn(context: Context) -> ServerAppComponents:
     cfg = RunConfig.from_mapping(context.run_config)
     cfg.validate()
+    device = resolve_device(cfg.device)
     cfg.run_output_dir.mkdir(parents=True, exist_ok=True)
-    if cfg.resume and not (cfg.run_output_dir / "server_checkpoint.pt").is_file():
+    checkpoint_path = cfg.checkpoint_dir / "server_checkpoint.pt"
+    legacy_checkpoint_path = cfg.run_output_dir / "server_checkpoint.pt"
+    if cfg.resume and not (checkpoint_path.is_file() or legacy_checkpoint_path.is_file()):
         raise FileNotFoundError(
-            f"Resume was requested but no checkpoint exists in {cfg.run_output_dir}"
+            f"Resume was requested but no checkpoint exists in {cfg.checkpoint_dir}"
         )
     run_config_path = cfg.run_output_dir / "run_config.json"
     started_at = datetime.now(timezone.utc).isoformat()
     if cfg.resume and run_config_path.is_file():
         run_metadata = json.loads(run_config_path.read_text(encoding="utf-8"))
+        current_machine = machine_identity()
+        saved_machine_id = run_metadata.get("machine_id")
+        if saved_machine_id != current_machine["machine_id"]:
+            raise RuntimeError(
+                "This run can only be resumed on its originating machine. "
+                f"Checkpoint machine_id={saved_machine_id!r}; current "
+                f"machine_id={current_machine['machine_id']!r}. Start a new run on this machine."
+            )
         resume_events = run_metadata.setdefault("resume_events", [])
         resume_events.append(
             {
                 "resumed_at_utc": started_at,
                 "python": sys.version.split()[0],
                 "dependencies": _dependency_versions(),
+                "cuda_available": torch.cuda.is_available(),
+                "cuda_devices": (
+                    [torch.cuda.get_device_name(index) for index in range(torch.cuda.device_count())]
+                    if torch.cuda.is_available()
+                    else []
+                ),
+                "selected_device": str(device),
+                **new_run_identity(),
+                **current_machine,
                 **_source_provenance(),
             }
         )
     else:
+        run_identity = new_run_identity()
         run_metadata = {
             **asdict(cfg),
+            **run_identity,
             "started_at_utc": started_at,
             "python": sys.version.split()[0],
-            "platform": platform.platform(),
-            "machine": platform.machine(),
-            "processor": platform.processor() or None,
+            **machine_identity(),
             "dependencies": _dependency_versions(),
             "cuda_version": torch.version.cuda,
-            "cuda_device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+            "cuda_available": torch.cuda.is_available(),
+            "selected_device": str(device),
+            "cuda_devices": (
+                [torch.cuda.get_device_name(index) for index in range(torch.cuda.device_count())]
+                if torch.cuda.is_available()
+                else []
+            ),
             "dataset": {
                 "name": "CIFAR-10",
                 "source": "https://www.cs.toronto.edu/~kriz/cifar.html",
@@ -112,11 +138,15 @@ def server_fn(context: Context) -> ServerAppComponents:
     training_log = cfg.run_output_dir / "training.log"
     with training_log.open("a", encoding="utf-8") as log:
         action = "Resuming" if cfg.resume else "Started"
-        log.write(f"{action} run {cfg.tag} at {started_at}\n")
+        run_id = run_metadata.get("run_id", cfg.tag)
+        log.write(f"{action} run {cfg.tag} (run_id={run_id}) at {started_at}\n")
+        log.write(
+            f"CUDA check: available={torch.cuda.is_available()}; "
+            f"devices={run_metadata.get('cuda_devices', [])}; selected_device={device}\n"
+        )
         if not cfg.resume:
             log.write(json.dumps(run_metadata, sort_keys=True) + "\n")
 
-    device = resolve_device(cfg.device)
     torch.manual_seed(cfg.seed)
     model = HybridClassifier().to(device)
     initial_arrays = get_parameters(model)
@@ -157,7 +187,8 @@ def server_fn(context: Context) -> ServerAppComponents:
             writer.writeheader()
             writer.writerows(eval_rows[key] for key in sorted(eval_rows))
         if global_round == cfg.num_server_rounds:
-            torch.save(model.state_dict(), cfg.run_output_dir / "model.pt")
+            cfg.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            torch.save(model.state_dict(), cfg.checkpoint_dir / "final_model.pt")
         message = (
             f"[{cfg.tag}] round={global_round} loss={loss:.6f} "
             f"accuracy={acc:.2f}% epsilon={eps:.6g}"
