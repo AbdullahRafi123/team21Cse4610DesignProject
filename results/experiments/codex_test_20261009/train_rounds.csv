@@ -1,0 +1,3 @@
+round,active_clients,stragglers,learning_rate,mean_client_local_seconds,mean_client_noise_seconds,failures
+1,5,0,1.0,0.13692067559968563,0.001334785999642918,0
+2,5,0,0.6000000000000001,0.10196801659985795,0.0016760445992986205,0

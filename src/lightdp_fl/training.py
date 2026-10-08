@@ -1,7 +1,7 @@
 from __future__ import annotations
 import math
 import time
-from typing import Iterable
+from collections.abc import Callable
 
 import numpy as np
 import torch
@@ -13,8 +13,17 @@ from .config import RunConfig
 from .model import HybridClassifier, get_parameters, set_parameters, flat_to_arrays
 from .privacy import Calibration, add_private_noise, active_client_ids
 
+GradientHelpers = tuple[
+    list[str],
+    dict[str, torch.Tensor],
+    Callable[..., torch.Tensor],
+    Callable[..., dict[str, torch.Tensor]],
+]
 
-def _functional_helpers(model: HybridClassifier):
+
+def _functional_helpers(
+    model: HybridClassifier, compile_mode: str | None = None
+) -> GradientHelpers:
     names = [k for k, _ in model.named_parameters()]
     buffers = dict(model.named_buffers())
 
@@ -23,6 +32,8 @@ def _functional_helpers(model: HybridClassifier):
         return F.cross_entropy(logits, y[None])
 
     per_example = vmap(grad(one_loss), in_dims=(None, None, 0, 0, 0), randomness="error")
+    if compile_mode is not None:
+        per_example = torch.compile(per_example, mode=compile_mode)
     return names, buffers, one_loss, per_example
 
 
@@ -35,11 +46,13 @@ def clipped_client_gradient(
     clip: float,
     microbatch: int,
     device: torch.device,
+    *,
+    autocast_dtype: torch.dtype | None = None,
+    gradient_helpers: GradientHelpers | None = None,
 ) -> torch.Tensor:
-    names, buffers, _, per_example = _functional_helpers(model)
+    names, buffers, _, per_example = gradient_helpers or _functional_helpers(model)
     params = {k: v for k, v in model.named_parameters()}
-    P = sum(v.numel() for v in params.values())
-    total = torch.zeros(P, device=device)
+    totals = [torch.zeros_like(params[name], device=device) for name in names]
     view = round_zero_based % 2
 
     for start in range(0, len(labels), microbatch):
@@ -48,12 +61,22 @@ def clipped_client_gradient(
             x = x.flip(-1)
         feat = features[view, start:start+microbatch].to(device)
         y = labels[start:start+microbatch].to(device)
-        grads = per_example(params, buffers, x, feat, y)
-        flat = torch.cat([grads[k].flatten(1) for k in names], dim=1)
-        norm = flat.norm(dim=1).clamp_min(1e-12)
+        if autocast_dtype is None:
+            grads = per_example(params, buffers, x, feat, y)
+        else:
+            with torch.autocast(device.type, dtype=autocast_dtype):
+                grads = per_example(params, buffers, x, feat, y)
+        # Compute each example's global norm without materializing a [batch, P]
+        # concatenation of all parameter gradients.
+        norm_sq = torch.zeros(len(y), device=device)
+        flat_grads = [grads[name].flatten(1) for name in names]
+        for grad_part in flat_grads:
+            norm_sq.add_(grad_part.square().sum(dim=1))
+        norm = norm_sq.sqrt().clamp_min(1e-12)
         factors = (clip / norm).clamp(max=1.0)
-        total.add_((flat * factors[:, None]).sum(0).detach())
-    return total / len(labels)
+        for total, grad_part in zip(totals, flat_grads, strict=True):
+            total.add_((grad_part * factors[:, None]).sum(dim=0).reshape_as(total).detach())
+    return torch.cat([total.reshape(-1) for total in totals]) / len(labels)
 
 
 def compute_client_upload(
@@ -83,7 +106,7 @@ def compute_client_upload(
     noise_seconds = time.monotonic() - noise_started
 
     active, s = active_client_ids(cfg.seed, round_zero_based, cfg.num_clients, cfg.max_stragglers)
-    is_active = int(partition_id in set(active.tolist()))
+    is_active = int(bool(np.any(active == partition_id)))
     # We return the computed vector even for simulated stragglers. The server ignores it.
     # This preserves the notebook's "compute first, miss upload deadline second" timing semantics.
     arrays = flat_to_arrays(protected, model)
@@ -92,12 +115,11 @@ def compute_client_upload(
         "stragglers": s,
         "local_seconds": float(local_seconds),
         "noise_seconds": float(noise_seconds),
-        "client_id": int(partition_id),
     }
     return arrays, metrics
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def evaluate_global(
     model: HybridClassifier,
     pixels: torch.Tensor,

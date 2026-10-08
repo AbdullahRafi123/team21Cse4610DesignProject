@@ -30,12 +30,19 @@ dependencies = [
   "scikit-image>=0.22",
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
 [project.urls]
 Repository = "https://github.com/AbdullahRafi123/team21Cse4610DesignProject"
 Documentation = "https://github.com/AbdullahRafi123/team21Cse4610DesignProject/blob/main/docs/RESEARCH_STANDARDS.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lightdp_fl"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
 
 [tool.flwr.app]
 publisher = "team21"
@@ -68,6 +75,7 @@ cache-dir = ".cache/lightdp_flower"
 output-dir = "results/experiments"
 tag = "smoke_lightdp"
 device = "auto"
+resume = false
 
 [tool.flwr.federations]
 default = "local-simulation"

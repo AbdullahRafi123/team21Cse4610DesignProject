@@ -69,33 +69,52 @@ def server_fn(context: Context) -> ServerAppComponents:
     cfg = RunConfig.from_mapping(context.run_config)
     cfg.validate()
     cfg.run_output_dir.mkdir(parents=True, exist_ok=True)
+    if cfg.resume and not (cfg.run_output_dir / "server_checkpoint.pt").is_file():
+        raise FileNotFoundError(
+            f"Resume was requested but no checkpoint exists in {cfg.run_output_dir}"
+        )
     run_config_path = cfg.run_output_dir / "run_config.json"
-    run_metadata = {
-        **asdict(cfg),
-        "started_at_utc": datetime.now(timezone.utc).isoformat(),
-        "python": sys.version.split()[0],
-        "platform": platform.platform(),
-        "machine": platform.machine(),
-        "processor": platform.processor() or None,
-        "dependencies": _dependency_versions(),
-        "cuda_version": torch.version.cuda,
-        "cuda_device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
-        "dataset": {
-            "name": "CIFAR-10",
-            "source": "https://www.cs.toronto.edu/~kriz/cifar.html",
-            "train_examples": 50000,
-            "test_examples": 10000,
-        },
-        "pretrained_backbone": (
-            "torchvision ResNet18_Weights.IMAGENET1K_V1" if cfg.use_pretrained else None
-        ),
-        **_source_provenance(),
-    }
+    started_at = datetime.now(timezone.utc).isoformat()
+    if cfg.resume and run_config_path.is_file():
+        run_metadata = json.loads(run_config_path.read_text(encoding="utf-8"))
+        resume_events = run_metadata.setdefault("resume_events", [])
+        resume_events.append(
+            {
+                "resumed_at_utc": started_at,
+                "python": sys.version.split()[0],
+                "dependencies": _dependency_versions(),
+                **_source_provenance(),
+            }
+        )
+    else:
+        run_metadata = {
+            **asdict(cfg),
+            "started_at_utc": started_at,
+            "python": sys.version.split()[0],
+            "platform": platform.platform(),
+            "machine": platform.machine(),
+            "processor": platform.processor() or None,
+            "dependencies": _dependency_versions(),
+            "cuda_version": torch.version.cuda,
+            "cuda_device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+            "dataset": {
+                "name": "CIFAR-10",
+                "source": "https://www.cs.toronto.edu/~kriz/cifar.html",
+                "train_examples": 50000,
+                "test_examples": 10000,
+            },
+            "pretrained_backbone": (
+                "torchvision ResNet18_Weights.IMAGENET1K_V1" if cfg.use_pretrained else None
+            ),
+            **_source_provenance(),
+        }
     run_config_path.write_text(json.dumps(run_metadata, indent=2) + "\n", encoding="utf-8")
     training_log = cfg.run_output_dir / "training.log"
     with training_log.open("a", encoding="utf-8") as log:
-        log.write(f"Started run {cfg.tag} at {run_metadata['started_at_utc']}\n")
-        log.write(json.dumps(run_metadata, sort_keys=True) + "\n")
+        action = "Resuming" if cfg.resume else "Started"
+        log.write(f"{action} run {cfg.tag} at {started_at}\n")
+        if not cfg.resume:
+            log.write(json.dumps(run_metadata, sort_keys=True) + "\n")
 
     device = resolve_device(cfg.device)
     torch.manual_seed(cfg.seed)
@@ -112,21 +131,35 @@ def server_fn(context: Context) -> ServerAppComponents:
         )
 
     test_pixels, test_labels, test_features = load_test_data(cfg, device)
-    eval_rows: list[dict] = []
+    eval_rows: dict[int, dict[str, float | int]] = {}
+    resume_round = 0
+    history_path = cfg.run_output_dir / "history.csv"
+    if cfg.resume and history_path.is_file():
+        with history_path.open(newline="", encoding="utf-8") as history_file:
+            for saved_row in csv.DictReader(history_file):
+                round_id = int(saved_row["round"])
+                eval_rows[round_id] = {
+                    "round": round_id,
+                    "loss": float(saved_row["loss"]),
+                    "accuracy": float(saved_row["accuracy"]),
+                    "epsilon": float(saved_row["epsilon"]),
+                }
 
-    def evaluate_fn(server_round, parameters, config):
+    def evaluate_fn(server_round: int, parameters, config):
+        global_round = resume_round + server_round
         set_parameters(model, parameters)
         loss, acc = evaluate_global(model, test_pixels, test_labels, test_features, device)
-        eps = float("inf") if calibration is None else eps_from_rho(server_round * calibration.rho_round, cfg.delta)
-        row = {"round": int(server_round), "loss": float(loss), "accuracy": float(acc), "epsilon": float(eps)}
-        eval_rows.append(row)
-        path = cfg.run_output_dir / "history.csv"
-        with path.open("w", newline="", encoding="utf-8") as f:
+        eps = float("inf") if calibration is None else eps_from_rho(global_round * calibration.rho_round, cfg.delta)
+        row = {"round": global_round, "loss": float(loss), "accuracy": float(acc), "epsilon": float(eps)}
+        eval_rows[global_round] = row
+        with history_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=list(row.keys()))
-            writer.writeheader(); writer.writerows(eval_rows)
-        torch.save(model.state_dict(), cfg.run_output_dir / "model.pt")
+            writer.writeheader()
+            writer.writerows(eval_rows[key] for key in sorted(eval_rows))
+        if global_round == cfg.num_server_rounds:
+            torch.save(model.state_dict(), cfg.run_output_dir / "model.pt")
         message = (
-            f"[{cfg.tag}] round={server_round} loss={loss:.6f} "
+            f"[{cfg.tag}] round={global_round} loss={loss:.6f} "
             f"accuracy={acc:.2f}% epsilon={eps:.6g}"
         )
         print(message, flush=True)
@@ -134,8 +167,14 @@ def server_fn(context: Context) -> ServerAppComponents:
             log.write(f"{datetime.now(timezone.utc).isoformat()} {message}\n")
         return float(loss), {"accuracy": float(acc), "epsilon": float(eps)}
 
-    def fit_config(server_round: int):
-        return {"server_round": int(server_round)}
+    def fit_config(server_round: int) -> dict[str, int | float]:
+        global_round = resume_round + server_round
+        fit_settings: dict[str, int | float] = {"server_round": global_round}
+        if calibration is not None:
+            fit_settings.update(
+                {f"calibration_{key}": value for key, value in calibration.to_dict().items()}
+            )
+        return fit_settings
 
     strategy = GradientMomentumStrategy(
         cfg=cfg,
@@ -149,7 +188,15 @@ def server_fn(context: Context) -> ServerAppComponents:
         evaluate_fn=evaluate_fn,
         accept_failures=False,
     )
-    return ServerAppComponents(strategy=strategy, config=ServerConfig(num_rounds=cfg.num_server_rounds))
+    resume_round = strategy.resume_round
+    for saved_round in list(eval_rows):
+        if saved_round > strategy.resume_round:
+            del eval_rows[saved_round]
+    remaining_rounds = cfg.num_server_rounds - strategy.resume_round
+    if remaining_rounds <= 0:
+        raise ValueError("There are no training rounds left to run")
+
+    return ServerAppComponents(strategy=strategy, config=ServerConfig(num_rounds=remaining_rounds))
 
 
 app = ServerApp(server_fn=server_fn)

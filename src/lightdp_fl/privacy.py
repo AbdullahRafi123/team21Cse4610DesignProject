@@ -8,6 +8,8 @@ import numpy as np
 import torch
 from scipy.optimize import minimize_scalar
 
+from .config import Method
+
 
 def rho_from_eps(eps: float, delta: float) -> float:
     L = math.log(1.0 / delta)
@@ -43,7 +45,7 @@ class Calibration:
     steps: int
     sensitivity: float
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, float | int]:
         return asdict(self)
 
 
@@ -93,7 +95,7 @@ def gaussian_vector(length: int, std: float, seed: int, device: torch.device) ->
 
 def add_private_noise(
     gradient: torch.Tensor,
-    method: str,
+    method: Method,
     client_id: int,
     round_zero_based: int,
     N: int,

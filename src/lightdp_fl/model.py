@@ -1,5 +1,4 @@
 from __future__ import annotations
-from collections import OrderedDict
 from typing import Iterable
 import numpy as np
 import torch
@@ -27,7 +26,9 @@ class HybridClassifier(nn.Module):
         return self.head(torch.cat([public, learned], dim=-1))
 
 
-def parameter_names_shapes_sizes(model: nn.Module):
+def parameter_names_shapes_sizes(
+    model: nn.Module,
+) -> tuple[list[str], list[tuple[int, ...]], list[int]]:
     names = [name for name, _ in model.named_parameters()]
     shapes = [tuple(p.shape) for p in model.parameters()]
     sizes = [p.numel() for p in model.parameters()]

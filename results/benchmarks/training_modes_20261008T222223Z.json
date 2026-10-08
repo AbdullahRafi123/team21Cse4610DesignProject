@@ -1,0 +1,51 @@
+{
+  "benchmark_kind": "synthetic clipped-gradient microbenchmark",
+  "created_at_utc": "2026-10-08T22:22:23.978447+00:00",
+  "torch_version": "2.14.1+cu130",
+  "python_version": "3.12.3",
+  "platform": "Linux-6.8.0-142-generic-x86_64-with-glibc2.39",
+  "cpu_count": 8,
+  "device": "cpu",
+  "device_name": "CPU",
+  "examples": 16,
+  "microbatch": 16,
+  "repeats": 3,
+  "warmups": 1,
+  "compile_mode": "default",
+  "results": {
+    "eager_fp32": {
+      "median_seconds": 0.011456731997895986,
+      "samples_seconds": [
+        0.012191728001198499,
+        0.010589214001811342,
+        0.011456731997895986
+      ],
+      "warmup_seconds": 1.0480706989983446,
+      "relative_l2_error_vs_eager": 0.0,
+      "speedup_vs_eager": 1.0
+    },
+    "autocast_bfloat16": {
+      "median_seconds": 0.02500009899813449,
+      "samples_seconds": [
+        0.02500009899813449,
+        0.026001164002082078,
+        0.02356081799734966
+      ],
+      "warmup_seconds": 0.024941429001046345,
+      "relative_l2_error_vs_eager": 0.002420414239168167,
+      "speedup_vs_eager": 0.4582674652108733
+    },
+    "compile": {
+      "median_seconds": 0.008407997000176692,
+      "samples_seconds": [
+        0.008924718000344,
+        0.008407997000176692,
+        0.007868616001360351
+      ],
+      "warmup_seconds": 14.165990161000082,
+      "relative_l2_error_vs_eager": 2.1760232726819595e-08,
+      "speedup_vs_eager": 1.36259943927849
+    }
+  },
+  "interpretation": "Synthetic microbenchmark only; compare task metrics and privacy behavior before adopting a mode in a research run."
+}

@@ -3,7 +3,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from contextlib import contextmanager
+from functools import lru_cache
+from tempfile import NamedTemporaryFile
 
 import numpy as np
 import torch
@@ -29,7 +30,7 @@ def dataset_root(cfg: RunConfig) -> Path:
     return root
 
 
-def _raw(train: bool, cfg: RunConfig):
+def _raw(train: bool, cfg: RunConfig) -> datasets.CIFAR10:
     try:
         return datasets.CIFAR10(str(dataset_root(cfg)), train=train, download=True)
     except (OSError, RuntimeError) as exc:
@@ -44,13 +45,16 @@ def _raw(train: bool, cfg: RunConfig):
 
 def all_pixels_labels(train: bool, cfg: RunConfig) -> tuple[torch.Tensor, torch.Tensor]:
     ds = _raw(train, cfg)
-    pixels = torch.tensor(ds.data).permute(0, 3, 1, 2).float().div_(255.0)
-    labels = torch.tensor(ds.targets, dtype=torch.long)
+    pixels = torch.from_numpy(ds.data).permute(0, 3, 1, 2).float().div_(255.0)
+    labels = torch.as_tensor(ds.targets, dtype=torch.long)
     return pixels, labels
 
 
-def partition_indices(cfg: RunConfig, partition_id: int) -> np.ndarray:
-    _, labels = all_pixels_labels(True, cfg)
+def _partition_indices_from_labels(
+    cfg: RunConfig, partition_id: int, labels: torch.Tensor
+) -> np.ndarray:
+    if not 0 <= partition_id < cfg.num_clients:
+        raise ValueError(f"partition-id must be in [0, {cfg.num_clients}), got {partition_id}")
     N = cfg.num_clients
     rng = np.random.default_rng(cfg.seed)
     order = rng.permutation(len(labels))
@@ -67,7 +71,12 @@ def partition_indices(cfg: RunConfig, partition_id: int) -> np.ndarray:
     return ids
 
 
-def _weights(cfg: RunConfig):
+def partition_indices(cfg: RunConfig, partition_id: int) -> np.ndarray:
+    labels = torch.as_tensor(_raw(True, cfg).targets, dtype=torch.long)
+    return _partition_indices_from_labels(cfg, partition_id, labels)
+
+
+def _weights(cfg: RunConfig) -> models.ResNet18_Weights | None:
     return models.ResNet18_Weights.IMAGENET1K_V1 if cfg.use_pretrained else None
 
 
@@ -89,10 +98,14 @@ def make_backbone(cfg: RunConfig, device: torch.device) -> nn.Module:
     return backbone
 
 
+@lru_cache(maxsize=8)
+def _normalization(device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    return MEAN.to(device), STD.to(device)
+
+
 @torch.no_grad()
-def public_features(backbone: nn.Module, x: torch.Tensor, image_size: int, device: torch.device) -> torch.Tensor:
-    mean = MEAN.to(device)
-    std = STD.to(device)
+def public_features(backbone: nn.Module, x: torch.Tensor, image_size: int) -> torch.Tensor:
+    mean, std = _normalization(x.device)
     x = F.interpolate(x, size=(image_size, image_size), mode="bilinear", align_corners=False, antialias=True)
     return F.normalize(backbone((x - mean) / std), dim=1)
 
@@ -112,14 +125,28 @@ def _cache_file(cfg: RunConfig, split: str, partition_id: int | None) -> Path:
     return folder / f"{split}_{_feature_key(cfg, split, partition_id)}.pt"
 
 
-def load_client_data(cfg: RunConfig, partition_id: int, device: torch.device):
+def _save_feature_cache(path: Path, features: torch.Tensor) -> None:
+    with NamedTemporaryFile(dir=path.parent, suffix=".tmp", delete=False) as temp_file:
+        temp_path = Path(temp_file.name)
+    try:
+        torch.save({"features": features}, temp_path)
+        os.replace(temp_path, path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+def load_client_data(
+    cfg: RunConfig, partition_id: int, device: torch.device
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     path = _cache_file(cfg, "train", partition_id)
-    pixels_all, labels_all = all_pixels_labels(True, cfg)
-    ids = partition_indices(cfg, partition_id)
-    pixels = pixels_all[torch.as_tensor(ids)]
-    labels = labels_all[torch.as_tensor(ids)]
+    dataset = _raw(True, cfg)
+    labels_all = torch.as_tensor(dataset.targets, dtype=torch.long)
+    ids = _partition_indices_from_labels(cfg, partition_id, labels_all)
+    index = torch.as_tensor(ids)
+    pixels = torch.from_numpy(dataset.data[ids]).permute(0, 3, 1, 2).float().div_(255.0)
+    labels = labels_all[index]
     if path.exists():
-        cached = torch.load(path, map_location="cpu")
+        cached = torch.load(path, map_location="cpu", weights_only=True)
         return pixels, labels, cached["features"]
 
     backbone = make_backbone(cfg, device)
@@ -130,35 +157,33 @@ def load_client_data(cfg: RunConfig, partition_id: int, device: torch.device):
             x = pixels[start:start+cfg.feature_batch].to(device)
             if flip:
                 x = x.flip(-1)
-            chunks.append(public_features(backbone, x, cfg.image_size, device).cpu())
+            chunks.append(public_features(backbone, x, cfg.image_size).cpu())
         views.append(torch.cat(chunks, dim=0))
     features = torch.stack(views)
-    temp = path.with_suffix(".tmp")
-    torch.save({"features": features}, temp)
-    os.replace(temp, path)
+    _save_feature_cache(path, features)
     del backbone
-    if torch.cuda.is_available():
+    if device.type == "cuda":
         torch.cuda.empty_cache()
     return pixels, labels, features
 
 
-def load_test_data(cfg: RunConfig, device: torch.device):
+def load_test_data(
+    cfg: RunConfig, device: torch.device
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     path = _cache_file(cfg, "test", None)
     pixels, labels = all_pixels_labels(False, cfg)
     if path.exists():
-        cached = torch.load(path, map_location="cpu")
+        cached = torch.load(path, map_location="cpu", weights_only=True)
         return pixels, labels, cached["features"]
 
     backbone = make_backbone(cfg, device)
     chunks = []
     for start in range(0, len(pixels), cfg.feature_batch):
         x = pixels[start:start+cfg.feature_batch].to(device)
-        chunks.append(public_features(backbone, x, cfg.image_size, device).cpu())
+        chunks.append(public_features(backbone, x, cfg.image_size).cpu())
     features = torch.cat(chunks, dim=0)
-    temp = path.with_suffix(".tmp")
-    torch.save({"features": features}, temp)
-    os.replace(temp, path)
+    _save_feature_cache(path, features)
     del backbone
-    if torch.cuda.is_available():
+    if device.type == "cuda":
         torch.cuda.empty_cache()
     return pixels, labels, features
