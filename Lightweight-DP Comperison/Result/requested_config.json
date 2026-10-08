@@ -1,0 +1,26 @@
+{
+  "seed": 2026,
+  "train_size": 50000,
+  "n_clients": 50,
+  "max_colluders": 10,
+  "max_stragglers": 10,
+  "epsilon": 6.0,
+  "delta": 1e-05,
+  "clip": 1.0,
+  "lr": 1.0,
+  "momentum": 0.9,
+  "image_size": 224,
+  "feature_batch": 128,
+  "microbatch": 32,
+  "requested_main_rounds": 50,
+  "requested_sweep_rounds": 10,
+  "target_minutes": 110,
+  "diagnostic_reserve_minutes": 15,
+  "attack_steps": 700,
+  "attack_restarts": 2,
+  "attack_ids": [
+    0,
+    1
+  ],
+  "feature_views": 2
+}

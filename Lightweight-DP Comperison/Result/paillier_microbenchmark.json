@@ -1,0 +1,12 @@
+{
+  "key_bits": 2048,
+  "sample_elements": 16,
+  "key_generation_seconds": 0.7286423109999305,
+  "measured_encrypt_16_seconds": 1.6460869569998522,
+  "measured_add_16_seconds": 0.0008757739999509795,
+  "measured_decrypt_16_seconds": 0.4710527380000258,
+  "projected_encrypt_P_seconds": 2917.894892151863,
+  "float32_payload_KiB": 110.7890625,
+  "ciphertext_fixed_width_payload_KiB": 14181.0,
+  "ciphertext_to_float_payload_ratio": 128.0
+}
