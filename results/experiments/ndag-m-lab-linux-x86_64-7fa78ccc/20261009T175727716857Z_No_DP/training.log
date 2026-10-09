@@ -1,0 +1,34 @@
+Started run 20261009T175727716857Z_No_DP (run_id=20261009T175729Z_ndag-m-lab-linux-x86_64-7fa78ccc_run0001_1bc1a30c) at 2026-10-09T17:57:29.443418+00:00
+CUDA check: available=True; devices=['NVIDIA GeForce RTX 3090']; selected_device=cuda
+{"cache_dir": ".cache/lightdp_flower", "clip": 1.0, "cuda_available": true, "cuda_devices": ["NVIDIA GeForce RTX 3090"], "cuda_version": "12.8", "dataset": {"name": "CIFAR-10", "source": "https://www.cs.toronto.edu/~kriz/cifar.html", "test_examples": 10000, "train_examples": 50000}, "delta": 1e-05, "dependencies": {"flwr": "1.25.0", "matplotlib": "3.10.8", "numpy": "2.2.6", "pandas": "2.3.3", "scikit-image": "0.25.2", "scipy": "1.15.3", "torch": "2.8.0", "torchvision": "0.23.0"}, "device": "cuda", "epsilon": 6.0, "feature_batch": 128, "git_revision": "b0c681e0a24423154a460308e7fb52e90aab392a", "git_worktree_dirty": true, "hostname": "NDAG-M-Lab", "image_size": 224, "learning_rate": 1.0, "machine_architecture": "x86_64", "machine_id": "ndag-m-lab-linux-x86_64-7fa78ccc", "max_colluders": 10, "max_records_per_client": 0, "max_stragglers": 10, "method": "no_dp", "microbatch": 32, "momentum": 0.9, "non_iid": false, "num_clients": 50, "num_server_rounds": 30, "output_dir": "results/experiments", "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39", "pretrained_backbone": "torchvision ResNet18_Weights.IMAGENET1K_V1", "processor": "x86_64", "python": "3.10.19", "resume": false, "run_id": "20261009T175729Z_ndag-m-lab-linux-x86_64-7fa78ccc_run0001_1bc1a30c", "run_number": 1, "seed": 2026, "selected_device": "cuda", "started_at_utc": "2026-10-09T17:57:29.443418+00:00", "tag": "20261009T175727716857Z_No_DP", "use_pretrained": true}
+2026-10-09T18:27:51.247726+00:00 [20261009T175727716857Z_No_DP] round=0 loss=2.302986 accuracy=10.09% epsilon=inf progress=0/30 ETA=estimating
+2026-10-09T18:27:53.516072+00:00 [20261009T175727716857Z_No_DP] round=1 loss=2.302986 accuracy=10.09% epsilon=inf progress=1/30 avg_round=2.4s ETA~00:01:11
+2026-10-09T18:27:53.766828+00:00 [20261009T175727716857Z_No_DP] round=2 loss=2.302986 accuracy=10.09% epsilon=inf progress=2/30 avg_round=1.3s ETA~00:00:38
+2026-10-09T18:27:54.016373+00:00 [20261009T175727716857Z_No_DP] round=3 loss=2.302986 accuracy=10.09% epsilon=inf progress=3/30 avg_round=1.0s ETA~00:00:27
+2026-10-09T18:27:54.360206+00:00 [20261009T175727716857Z_No_DP] round=4 loss=2.302986 accuracy=10.09% epsilon=inf progress=4/30 avg_round=0.8s ETA~00:00:22
+2026-10-09T18:27:54.609252+00:00 [20261009T175727716857Z_No_DP] round=5 loss=2.302986 accuracy=10.09% epsilon=inf progress=5/30 avg_round=0.7s ETA~00:00:18
+2026-10-09T18:27:55.062588+00:00 [20261009T175727716857Z_No_DP] round=6 loss=2.302986 accuracy=10.09% epsilon=inf progress=6/30 avg_round=0.7s ETA~00:00:16
+2026-10-09T18:27:55.313652+00:00 [20261009T175727716857Z_No_DP] round=7 loss=2.302986 accuracy=10.09% epsilon=inf progress=7/30 avg_round=0.6s ETA~00:00:14
+2026-10-09T18:27:55.660933+00:00 [20261009T175727716857Z_No_DP] round=8 loss=2.302986 accuracy=10.09% epsilon=inf progress=8/30 avg_round=0.6s ETA~00:00:13
+2026-10-09T18:27:55.914064+00:00 [20261009T175727716857Z_No_DP] round=9 loss=2.302986 accuracy=10.09% epsilon=inf progress=9/30 avg_round=0.5s ETA~00:00:12
+2026-10-09T18:27:56.163949+00:00 [20261009T175727716857Z_No_DP] round=10 loss=2.302986 accuracy=10.09% epsilon=inf progress=10/30 avg_round=0.5s ETA~00:00:11
+2026-10-09T18:27:56.415611+00:00 [20261009T175727716857Z_No_DP] round=11 loss=2.302986 accuracy=10.09% epsilon=inf progress=11/30 avg_round=0.5s ETA~00:00:10
+2026-10-09T18:27:56.666192+00:00 [20261009T175727716857Z_No_DP] round=12 loss=2.302986 accuracy=10.09% epsilon=inf progress=12/30 avg_round=0.5s ETA~00:00:09
+2026-10-09T18:27:57.012418+00:00 [20261009T175727716857Z_No_DP] round=13 loss=2.302986 accuracy=10.09% epsilon=inf progress=13/30 avg_round=0.5s ETA~00:00:08
+2026-10-09T18:27:57.261516+00:00 [20261009T175727716857Z_No_DP] round=14 loss=2.302986 accuracy=10.09% epsilon=inf progress=14/30 avg_round=0.4s ETA~00:00:08
+2026-10-09T18:27:57.713379+00:00 [20261009T175727716857Z_No_DP] round=15 loss=2.302986 accuracy=10.09% epsilon=inf progress=15/30 avg_round=0.4s ETA~00:00:07
+2026-10-09T18:27:57.962334+00:00 [20261009T175727716857Z_No_DP] round=16 loss=2.302986 accuracy=10.09% epsilon=inf progress=16/30 avg_round=0.4s ETA~00:00:07
+2026-10-09T18:27:58.223209+00:00 [20261009T175727716857Z_No_DP] round=17 loss=2.302986 accuracy=10.09% epsilon=inf progress=17/30 avg_round=0.4s ETA~00:00:06
+2026-10-09T18:27:58.474308+00:00 [20261009T175727716857Z_No_DP] round=18 loss=2.302986 accuracy=10.09% epsilon=inf progress=18/30 avg_round=0.4s ETA~00:00:05
+2026-10-09T18:27:58.822916+00:00 [20261009T175727716857Z_No_DP] round=19 loss=2.302986 accuracy=10.09% epsilon=inf progress=19/30 avg_round=0.4s ETA~00:00:05
+2026-10-09T18:27:59.075353+00:00 [20261009T175727716857Z_No_DP] round=20 loss=2.302986 accuracy=10.09% epsilon=inf progress=20/30 avg_round=0.4s ETA~00:00:04
+2026-10-09T18:27:59.329640+00:00 [20261009T175727716857Z_No_DP] round=21 loss=2.302986 accuracy=10.09% epsilon=inf progress=21/30 avg_round=0.4s ETA~00:00:04
+2026-10-09T18:27:59.584511+00:00 [20261009T175727716857Z_No_DP] round=22 loss=2.302986 accuracy=10.09% epsilon=inf progress=22/30 avg_round=0.4s ETA~00:00:04
+2026-10-09T18:27:59.834710+00:00 [20261009T175727716857Z_No_DP] round=23 loss=2.302986 accuracy=10.09% epsilon=inf progress=23/30 avg_round=0.4s ETA~00:00:03
+2026-10-09T18:28:00.177627+00:00 [20261009T175727716857Z_No_DP] round=24 loss=2.302986 accuracy=10.09% epsilon=inf progress=24/30 avg_round=0.4s ETA~00:00:03
+2026-10-09T18:28:00.427576+00:00 [20261009T175727716857Z_No_DP] round=25 loss=2.302986 accuracy=10.09% epsilon=inf progress=25/30 avg_round=0.4s ETA~00:00:02
+2026-10-09T18:28:00.877538+00:00 [20261009T175727716857Z_No_DP] round=26 loss=2.302986 accuracy=10.09% epsilon=inf progress=26/30 avg_round=0.4s ETA~00:00:02
+2026-10-09T18:28:01.129406+00:00 [20261009T175727716857Z_No_DP] round=27 loss=2.302986 accuracy=10.09% epsilon=inf progress=27/30 avg_round=0.4s ETA~00:00:02
+2026-10-09T18:28:01.588207+00:00 [20261009T175727716857Z_No_DP] round=28 loss=2.302986 accuracy=10.09% epsilon=inf progress=28/30 avg_round=0.4s ETA~00:00:01
+2026-10-09T18:28:01.840980+00:00 [20261009T175727716857Z_No_DP] round=29 loss=2.302986 accuracy=10.09% epsilon=inf progress=29/30 avg_round=0.4s ETA~00:00:01
+2026-10-09T18:28:02.304050+00:00 [20261009T175727716857Z_No_DP] round=30 loss=2.302986 accuracy=10.09% epsilon=inf progress=30/30 avg_round=0.4s ETA~00:00:00

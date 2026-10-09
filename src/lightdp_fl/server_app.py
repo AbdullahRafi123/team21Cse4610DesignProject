@@ -18,7 +18,7 @@ from .config import RunConfig
 from .data import load_test_data, resolve_device
 from .model import HybridClassifier, get_parameters, set_parameters
 from .privacy import calibrate, eps_from_rho
-from .progress import start_progress_monitor
+from .progress import feature_progress_callback, start_progress_monitor
 from .run_tracking import machine_identity, new_run_identity
 from .strategy import GradientMomentumStrategy
 from .training import evaluate_global
@@ -177,7 +177,13 @@ def server_fn(context: Context) -> ServerAppComponents:
             cfg.num_clients, cfg.max_colluders, cfg.max_stragglers,
         )
 
-    test_pixels, test_labels, test_features = load_test_data(cfg, device)
+    print("[setup] centralized CIFAR-10 test data/features: loading", flush=True)
+    test_pixels, test_labels, test_features = load_test_data(
+        cfg,
+        device,
+        progress_callback=feature_progress_callback("centralized test features"),
+    )
+    print("[setup] centralized CIFAR-10 test data/features: ready", flush=True)
     eval_rows: dict[int, dict[str, float | int]] = {}
     resume_round = 0
     history_path = cfg.run_output_dir / "history.csv"

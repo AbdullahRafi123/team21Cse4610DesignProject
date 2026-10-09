@@ -46,8 +46,7 @@ The launchers initialize the virtual environment if needed, then start the defau
 The default Flower configuration is a small smoke run. The supplied configurations and scripts run the larger comparisons:
 
 ```bash
-flwr run . local-simulation --stream --run-config configs/full_lightdp.toml \
-  --federation-config "options.num-supernodes=50"
+flwr run . local-simulation-suite --stream --run-config configs/full_lightdp.toml
 python scripts/run_main_suite.py
 python scripts/run_sweeps.py
 python scripts/collect_results.py
@@ -61,12 +60,11 @@ The default `local-simulation` federation reserves no GPUs, so it remains usable
 python -c 'import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No CUDA GPU")'
 ```
 
-The project includes a `local-simulation-gpu` federation profile. It reserves 0.5 GPU per client worker (up to two concurrent workers per GPU). Run the full LightDP configuration with the checked-in TOML file:
+The project includes a `local-simulation-gpu` federation profile with 50 supernodes. It reserves one GPU per client worker, limiting the pool to one concurrent worker per GPU to reduce VRAM contention. Compared with the earlier 0.5-GPU profile, this changes concurrency and runtime; record the effective resource setting when comparing timings. Run the full LightDP configuration with the checked-in TOML file:
 
 ```bash
 flwr run . local-simulation-gpu --stream \
-  --run-config configs/full_lightdp.toml \
-  --federation-config options.num-supernodes=50
+  --run-config configs/full_lightdp.toml
 ```
 
 For the complete main comparison or sweep suite, pass `--gpu` to the existing scripts:
@@ -83,7 +81,7 @@ Use the Python runner for multi-method experiments from PowerShell or other shel
 
 After running `setup/initialize.sh` on Linux or `setup/initialize.bat` on Windows, install or replace PyTorch with the CUDA-enabled build selected for that machine in the official PyTorch selector. Do this inside the project virtual environment. The generic project initializer may install a CPU-only PyTorch wheel on some platforms.
 
-The scripts explicitly select CUDA in GPU mode and fail early if CUDA-enabled PyTorch or a visible GPU is missing. GPU reservations are scheduling hints, not VRAM limits. Set `options.backend.client-resources.num-gpus=1.0` in the GPU profile to run one worker per GPU if memory is constrained. Native Windows simulation support through Ray is experimental; Linux is recommended for GPU simulations.
+The scripts explicitly select CUDA in GPU mode and fail early if CUDA-enabled PyTorch or a visible GPU is missing. GPU reservations are scheduling hints, not VRAM limits. Native Windows simulation support through Ray is experimental; Linux is recommended for GPU simulations.
 
 ### Resume an interrupted run
 
@@ -139,6 +137,8 @@ Each new run gets an ID such as `20261009T120000Z_host-linux-x86_64-a1b2c3d4_run
 At startup, the server and each client process check `torch.cuda.is_available()`, list visible GPUs, and log the selected device. With `device="auto"` the process uses CUDA when available and otherwise logs that it selected CPU. An explicitly requested CUDA device stops early with a clear error if CUDA is unavailable or the requested GPU index is not visible.
 
 With `flwr run --stream`, each server round now prints progress, average elapsed seconds per completed round, and an approximate remaining-round ETA (`ETA~HH:MM:SS`). The estimate is recalculated after each completed round. It excludes setup before the server starts rounds, such as initial downloads and test-feature preparation; first-run client feature extraction can also make early estimates shift.
+
+The main suite resolves the Flower CLI from the active Python environment, prepends that environment's executable directory so `flower-simulation` and Ray use the same environment, and streams output directly to the terminal. It verifies that each run wrote its configuration and all requested evaluation rounds before reporting completion; a CLI startup error cannot be mistaken for a successful run. During first-run setup, centralized test-feature preparation and each client's local data/feature preparation also print periodic batch updates, so downloads and cache creation remain visible before round progress begins.
 
 During client gradient computation, the server also prints an aggregate microbatch progress bar about every two seconds, including completed and started clients. The same aggregate line is appended to `training.log` every ten seconds. The per-client JSON status files are updated after each microbatch; they report gradient batches, not epochs, because each client computes one gradient update per federated round.
 

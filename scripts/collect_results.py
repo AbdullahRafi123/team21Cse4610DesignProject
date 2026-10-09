@@ -71,7 +71,7 @@ def main() -> None:
             SUMMARY_DIR / "training_rounds.csv", index=False
         )
 
-    main_runs = final[final["tag"].str.contains("(?:No_DP|Vanilla_local_noise_adding_eps|SMPC\\+DP_eps|LightDP_eps)", regex=True)]
+    main_runs = final[final["tag"].str.contains("(?:No_DP|Vanilla_local_noise_adding_eps|SMPC(?:_D|\\+D)P_eps|LightDP_eps)", regex=True)]
     if not main_runs.empty:
         figure, axis = plt.subplots(figsize=(11, 6))
         for _, run in main_runs.iterrows():

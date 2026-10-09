@@ -132,8 +132,16 @@ class GradientMomentumStrategy(FedAvg):
         results: list[tuple[ClientProxy, FitRes]],
         failures: list[tuple[ClientProxy, FitRes] | BaseException],
     ) -> tuple[Parameters | None, dict[str, Scalar]]:
+        if failures:
+            raise RuntimeError(
+                f"Aborting round {self.resume_round + server_round}: "
+                f"{len(failures)} client fit(s) failed"
+            )
         if not results:
-            return None, {}
+            raise RuntimeError(
+                f"Aborting round {self.resume_round + server_round}: "
+                "no client fit results were returned"
+            )
 
         global_round = self.resume_round + server_round
         active_vectors: list[torch.Tensor] = []

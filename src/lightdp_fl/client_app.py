@@ -8,7 +8,7 @@ from .config import RunConfig
 from .data import load_client_data, resolve_device
 from .model import HybridClassifier, get_parameters, set_parameters
 from .privacy import Calibration
-from .progress import write_client_progress
+from .progress import feature_progress_callback, write_client_progress
 from .training import compute_client_upload
 
 
@@ -33,7 +33,15 @@ class LightDPClient(NumPyClient):
         self.device = resolve_device(cfg.device)
         torch.manual_seed(cfg.seed)
         self.model = HybridClassifier().to(self.device)
-        self.pixels, self.labels, self.features = load_client_data(cfg, partition_id, self.device)
+        scope = f"client {partition_id + 1}/{cfg.num_clients} data/features"
+        print(f"[setup] {scope}: loading", flush=True)
+        self.pixels, self.labels, self.features = load_client_data(
+            cfg,
+            partition_id,
+            self.device,
+            progress_callback=feature_progress_callback(scope),
+        )
+        print(f"[setup] {scope}: ready records={len(self.labels)}", flush=True)
 
     def get_parameters(self, config: dict[str, Scalar]) -> list[np.ndarray]:
         return get_parameters(self.model)

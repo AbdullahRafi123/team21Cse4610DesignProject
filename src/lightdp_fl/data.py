@@ -28,7 +28,9 @@ def resolve_device(name: str) -> torch.device:
     if selected.startswith("cuda") and not cuda_available:
         raise RuntimeError(
             f"CUDA was requested with device={name!r}, but torch.cuda.is_available() is false. "
-            "Install a CUDA-enabled PyTorch build and check the GPU driver, or use device=auto/cpu."
+            "Install a CUDA-enabled PyTorch build and check the GPU driver, or use device=auto/cpu. "
+            f"torch.version.cuda={torch.version.cuda!r}, "
+            f"CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')!r}."
         )
     device = torch.device(selected)
     if device.type == "cuda" and torch.cuda.device_count() < 1:

@@ -88,9 +88,15 @@ options.backend.client-resources.num-cpus = 1
 # running on a machine without a CUDA GPU.
 options.backend.client-resources.num-gpus = 0
 
-# Opt in on CUDA-capable machines with:
-# flwr run . local-simulation-gpu --federation-config "options.num-supernodes=50"
-[tool.flwr.federations.local-simulation-gpu]
-options.num-supernodes = 5
+# Main experiment suite: 50 CPU clients while preserving the five-client
+# lightweight default above for direct Flower smoke runs.
+[tool.flwr.federations.local-simulation-suite]
+options.num-supernodes = 50
 options.backend.client-resources.num-cpus = 1
-options.backend.client-resources.num-gpus = 0.5
+options.backend.client-resources.num-gpus = 0
+
+# CUDA profile for the 50-client main experiment suite.
+[tool.flwr.federations.local-simulation-gpu]
+options.num-supernodes = 50
+options.backend.client-resources.num-cpus = 1
+options.backend.client-resources.num-gpus = 1.0

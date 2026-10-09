@@ -5,8 +5,26 @@ import math
 import os
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+def feature_progress_callback(scope: str) -> Callable[[str, int, int], None]:
+    """Print occasional feature-preparation updates without logging every batch."""
+    last_reported = 0
+
+    def report(stage: str, completed: int, total: int) -> None:
+        nonlocal last_reported
+        interval = max(1, total // 4)
+        if completed == 1 or completed - last_reported >= interval or completed == total:
+            print(
+                f"[setup] {scope}: {stage} batches={completed}/{total}",
+                flush=True,
+            )
+            last_reported = completed
+
+    return report
 
 
 def write_client_progress(
