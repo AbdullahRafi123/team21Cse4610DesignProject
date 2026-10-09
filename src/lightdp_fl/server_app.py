@@ -1,9 +1,11 @@
 from __future__ import annotations
 import csv
 import json
-from importlib import metadata
+import math
 import subprocess
 import sys
+import time
+from importlib import metadata
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +18,7 @@ from .config import RunConfig
 from .data import load_test_data, resolve_device
 from .model import HybridClassifier, get_parameters, set_parameters
 from .privacy import calibrate, eps_from_rho
+from .progress import start_progress_monitor
 from .run_tracking import machine_identity, new_run_identity
 from .strategy import GradientMomentumStrategy
 from .training import evaluate_global
@@ -63,6 +66,13 @@ def _dependency_versions() -> dict[str, str]:
         package: metadata.version(package)
         for package in distributions
     }
+
+
+def _format_duration(seconds: float) -> str:
+    total_seconds = max(0, math.ceil(seconds))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
 def server_fn(context: Context) -> ServerAppComponents:
@@ -147,6 +157,13 @@ def server_fn(context: Context) -> ServerAppComponents:
         if not cfg.resume:
             log.write(json.dumps(run_metadata, sort_keys=True) + "\n")
 
+    progress_stop = start_progress_monitor(
+        cfg.run_output_dir / "client_progress",
+        training_log,
+        cfg.num_clients,
+        cfg.num_server_rounds,
+    )
+
     torch.manual_seed(cfg.seed)
     model = HybridClassifier().to(device)
     initial_arrays = get_parameters(model)
@@ -189,13 +206,27 @@ def server_fn(context: Context) -> ServerAppComponents:
         if global_round == cfg.num_server_rounds:
             cfg.checkpoint_dir.mkdir(parents=True, exist_ok=True)
             torch.save(model.state_dict(), cfg.checkpoint_dir / "final_model.pt")
+        completed_rounds = max(0, global_round - strategy.resume_round)
+        if completed_rounds:
+            elapsed = time.monotonic() - training_started
+            average_round_seconds = elapsed / completed_rounds
+            rounds_left = max(0, cfg.num_server_rounds - global_round)
+            eta = _format_duration(average_round_seconds * rounds_left)
+            progress = (
+                f"progress={completed_rounds}/{session_rounds} "
+                f"avg_round={average_round_seconds:.1f}s ETA~{eta}"
+            )
+        else:
+            progress = f"progress=0/{session_rounds} ETA=estimating"
         message = (
             f"[{cfg.tag}] round={global_round} loss={loss:.6f} "
-            f"accuracy={acc:.2f}% epsilon={eps:.6g}"
+            f"accuracy={acc:.2f}% epsilon={eps:.6g} {progress}"
         )
         print(message, flush=True)
         with training_log.open("a", encoding="utf-8") as log:
             log.write(f"{datetime.now(timezone.utc).isoformat()} {message}\n")
+        if global_round >= cfg.num_server_rounds:
+            progress_stop.set()
         return float(loss), {"accuracy": float(acc), "epsilon": float(eps)}
 
     def fit_config(server_round: int) -> dict[str, int | float]:
@@ -226,6 +257,8 @@ def server_fn(context: Context) -> ServerAppComponents:
     remaining_rounds = cfg.num_server_rounds - strategy.resume_round
     if remaining_rounds <= 0:
         raise ValueError("There are no training rounds left to run")
+    session_rounds = remaining_rounds
+    training_started = time.monotonic()
 
     return ServerAppComponents(strategy=strategy, config=ServerConfig(num_rounds=remaining_rounds))
 

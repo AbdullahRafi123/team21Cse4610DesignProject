@@ -1,4 +1,4 @@
-round,loss,accuracy,epsilon,run,tag,method,epsilon_target,num_clients,max_colluders,max_stragglers,clip,learning_rate,started_at_utc
-2,2.2958373432159425,14.38,6.000000000000007,codex_resume_e2e_20261009,codex_resume_e2e_20261009,lightdp,6.0,5,1,1,1.0,1.0,2026-10-08T22:26:06.923596+00:00
-2,2.2958373432159425,14.38,6.000000000000007,codex_test_20261009,codex_test_20261009,lightdp,6.0,5,1,1,1.0,1.0,2026-10-08T22:25:23.644928+00:00
-2,2.295837331008911,14.38,6.000000000000007,smoke_lightdp,smoke_lightdp,lightdp,6.0,5,1,1,1.0,1.0,2026-10-08T18:57:35.500857+00:00
+round,loss,accuracy,epsilon,run,tag,run_id,run_number,machine_id,hostname,method,epsilon_target,num_clients,max_colluders,max_stragglers,clip,learning_rate,started_at_utc
+2,2.2958373432159425,14.38,6.000000000000007,codex_resume_e2e_20261009,codex_resume_e2e_20261009,,,,,lightdp,6.0,5,1,1,1.0,1.0,2026-10-08T22:26:06.923596+00:00
+2,2.2958373432159425,14.38,6.000000000000007,codex_test_20261009,codex_test_20261009,,,,,lightdp,6.0,5,1,1,1.0,1.0,2026-10-08T22:25:23.644928+00:00
+2,2.295837331008911,14.38,6.000000000000007,smoke_lightdp,smoke_lightdp,,,,,lightdp,6.0,5,1,1,1.0,1.0,2026-10-08T18:57:35.500857+00:00

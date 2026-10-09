@@ -53,7 +53,7 @@ python scripts/run_sweeps.py
 python scripts/collect_results.py
 ```
 
-#### Run on a CUDA GPU (Linux or Windows)
+### Run on a CUDA GPU (Linux or Windows)
 
 The default `local-simulation` federation reserves no GPUs, so it remains usable on CPU-only machines. For a CUDA-capable machine, install a CUDA-enabled PyTorch build that matches its NVIDIA driver using the [official PyTorch install selector](https://pytorch.org/get-started/locally/), then verify it from the project environment:
 
@@ -61,20 +61,27 @@ The default `local-simulation` federation reserves no GPUs, so it remains usable
 python -c 'import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No CUDA GPU")'
 ```
 
-The project includes a `local-simulation-gpu` federation profile. It reserves 0.5 GPU per client worker (up to two concurrent workers per GPU). Run one experiment with:
+The project includes a `local-simulation-gpu` federation profile. It reserves 0.5 GPU per client worker (up to two concurrent workers per GPU). Run the full LightDP configuration with the checked-in TOML file:
 
 ```bash
-flwr run . local-simulation-gpu --stream --run-config \
-  'method="lightdp" epsilon=6.0 tag="gpu_lightdp_eps6" num-clients=50 num-server-rounds=8 max-colluders=10 max-stragglers=10 max-records-per-client=0 microbatch=32 non-iid=false use-pretrained=true device="cuda"' \
-  --federation-config "options.num-supernodes=50"
+flwr run . local-simulation-gpu --stream \
+  --run-config configs/full_lightdp.toml \
+  --federation-config options.num-supernodes=50
 ```
 
 For the complete main comparison or sweep suite, pass `--gpu` to the existing scripts:
 
 ```bash
+# Four methods at epsilon 6 (no-DP baseline plus the three private methods)
+python scripts/run_main_suite.py --epsilon 6 --gpu
+# Full 10-run main suite and optional sweep suite
 python scripts/run_main_suite.py --gpu
 python scripts/run_sweeps.py --gpu
 ```
+
+Use the Python runner for multi-method experiments from PowerShell or other shells. It passes Flower arguments directly, avoiding shell-specific quoting of TOML strings.
+
+After running `setup/initialize.sh` on Linux or `setup/initialize.bat` on Windows, install or replace PyTorch with the CUDA-enabled build selected for that machine in the official PyTorch selector. Do this inside the project virtual environment. The generic project initializer may install a CPU-only PyTorch wheel on some platforms.
 
 The scripts explicitly select CUDA in GPU mode and fail early if CUDA-enabled PyTorch or a visible GPU is missing. GPU reservations are scheduling hints, not VRAM limits. Set `options.backend.client-resources.num-gpus=1.0` in the GPU profile to run one worker per GPU if memory is constrained. Native Windows simulation support through Ray is experimental; Linux is recommended for GPU simulations.
 
@@ -122,13 +129,18 @@ Suite and sweep scripts add a UTC timestamp to run names. Outputs are organized 
 - `run_config.json` records parameters, a UTC run ID, machine ID, machine-local run number, hostname, OS/architecture, and available CUDA devices.
 - `history.csv` records loss, accuracy, and privacy accounting per round.
 - `train_rounds.csv` records active clients, simulated stragglers, learning rate, and client timing.
-- `training.log` records run start and round summaries.
+- `training.log` records run start, round summaries, and periodic aggregate client microbatch progress.
+- `client_progress/round_<n>/client_<id>.json` stores the latest microbatch count and status for each client in a round.
 - `checkpoints/server_checkpoint.pt` stores that machine's latest resumable global parameters and momentum.
 - `checkpoints/final_model.pt` stores its final model state; `.pt` files are excluded from Git.
 
 Each new run gets an ID such as `20261009T120000Z_host-linux-x86_64-a1b2c3d4_run0007_9f8e7d6c`. Outputs are partitioned under `results/experiments/<machine-id>/<tag>/`, so equal tags on different machines stay separate when results are collected together. A stable machine ID and its sequence are stored in the user's cache directory (`~/.cache/lightdp_flower/` on Linux/macOS or `%LOCALAPPDATA%\lightdp_flower\` on Windows), so they persist across repository pulls without adding machine-specific state to Git. Resume events record the machine and sequence used to continue a run.
 
 At startup, the server and each client process check `torch.cuda.is_available()`, list visible GPUs, and log the selected device. With `device="auto"` the process uses CUDA when available and otherwise logs that it selected CPU. An explicitly requested CUDA device stops early with a clear error if CUDA is unavailable or the requested GPU index is not visible.
+
+With `flwr run --stream`, each server round now prints progress, average elapsed seconds per completed round, and an approximate remaining-round ETA (`ETA~HH:MM:SS`). The estimate is recalculated after each completed round. It excludes setup before the server starts rounds, such as initial downloads and test-feature preparation; first-run client feature extraction can also make early estimates shift.
+
+During client gradient computation, the server also prints an aggregate microbatch progress bar about every two seconds, including completed and started clients. The same aggregate line is appended to `training.log` every ten seconds. The per-client JSON status files are updated after each microbatch; they report gradient batches, not epochs, because each client computes one gradient update per federated round.
 
 Training logs and small tabular summaries are intentionally Git-trackable for reproducibility. Review and commit the relevant `run_config.json`, `history.csv`, `train_rounds.csv`, and `training.log` files after an experiment. `results/summary/all_runs.csv` includes run ID, machine ID, hostname, and run number so collected results can be compared across machines. Use a distinct `tag` for separate experiments on one machine; machine IDs partition outputs across machines. Local datasets, caches, machine IDs, and run-number counters are excluded from Git.
 

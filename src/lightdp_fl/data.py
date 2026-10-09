@@ -2,6 +2,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 from functools import lru_cache
 from tempfile import NamedTemporaryFile
@@ -30,6 +31,11 @@ def resolve_device(name: str) -> torch.device:
             "Install a CUDA-enabled PyTorch build and check the GPU driver, or use device=auto/cpu."
         )
     device = torch.device(selected)
+    if device.type == "cuda" and torch.cuda.device_count() < 1:
+        raise RuntimeError(
+            "CUDA was requested, but this process sees no CUDA devices. "
+            "Check the NVIDIA driver, CUDA-enabled PyTorch, and Flower/Ray GPU reservations."
+        )
     if device.type == "cuda" and device.index is not None and device.index >= torch.cuda.device_count():
         raise RuntimeError(
             f"CUDA device index {device.index} was requested, but only "
@@ -161,6 +167,7 @@ def _save_feature_cache(path: Path, features: torch.Tensor) -> None:
 
 def load_client_data(
     cfg: RunConfig, partition_id: int, device: torch.device
+    , progress_callback: Callable[[str, int, int], None] | None = None
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     path = _cache_file(cfg, "train", partition_id)
     dataset = _raw(True, cfg)
@@ -175,13 +182,22 @@ def load_client_data(
 
     backbone = make_backbone(cfg, device)
     views = []
-    for flip in (False, True):
+    total_batches = 2 * ((len(pixels) + cfg.feature_batch - 1) // cfg.feature_batch)
+    completed_batches = 0
+    for flip_index, flip in enumerate((False, True), start=1):
         chunks = []
         for start in range(0, len(pixels), cfg.feature_batch):
             x = pixels[start:start+cfg.feature_batch].to(device)
             if flip:
                 x = x.flip(-1)
             chunks.append(public_features(backbone, x, cfg.image_size).cpu())
+            completed_batches += 1
+            if progress_callback is not None:
+                progress_callback(
+                    f"client {partition_id + 1}/{cfg.num_clients}, view {flip_index}/2",
+                    completed_batches,
+                    total_batches,
+                )
         views.append(torch.cat(chunks, dim=0))
     features = torch.stack(views)
     _save_feature_cache(path, features)
@@ -193,6 +209,7 @@ def load_client_data(
 
 def load_test_data(
     cfg: RunConfig, device: torch.device
+    , progress_callback: Callable[[str, int, int], None] | None = None
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     path = _cache_file(cfg, "test", None)
     pixels, labels = all_pixels_labels(False, cfg)
@@ -202,9 +219,12 @@ def load_test_data(
 
     backbone = make_backbone(cfg, device)
     chunks = []
-    for start in range(0, len(pixels), cfg.feature_batch):
+    total_batches = (len(pixels) + cfg.feature_batch - 1) // cfg.feature_batch
+    for batch_index, start in enumerate(range(0, len(pixels), cfg.feature_batch), start=1):
         x = pixels[start:start+cfg.feature_batch].to(device)
         chunks.append(public_features(backbone, x, cfg.image_size).cpu())
+        if progress_callback is not None:
+            progress_callback("centralized test features", batch_index, total_batches)
     features = torch.cat(chunks, dim=0)
     _save_feature_cache(path, features)
     del backbone

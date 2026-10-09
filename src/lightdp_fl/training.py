@@ -49,13 +49,15 @@ def clipped_client_gradient(
     *,
     autocast_dtype: torch.dtype | None = None,
     gradient_helpers: GradientHelpers | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> torch.Tensor:
     names, buffers, _, per_example = gradient_helpers or _functional_helpers(model)
     params = {k: v for k, v in model.named_parameters()}
     totals = [torch.zeros_like(params[name], device=device) for name in names]
     view = round_zero_based % 2
 
-    for start in range(0, len(labels), microbatch):
+    total_microbatches = math.ceil(len(labels) / microbatch)
+    for batch_index, start in enumerate(range(0, len(labels), microbatch), start=1):
         x = pixels[start:start+microbatch].to(device)
         if view:
             x = x.flip(-1)
@@ -76,6 +78,8 @@ def clipped_client_gradient(
         factors = (clip / norm).clamp(max=1.0)
         for total, grad_part in zip(totals, flat_grads, strict=True):
             total.add_((grad_part * factors[:, None]).sum(dim=0).reshape_as(total).detach())
+        if progress_callback is not None:
+            progress_callback(batch_index, total_microbatches)
     return torch.cat([total.reshape(-1) for total in totals]) / len(labels)
 
 
@@ -89,11 +93,13 @@ def compute_client_upload(
     round_zero_based: int,
     calibration: Calibration | None,
     device: torch.device,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> tuple[list[np.ndarray], dict[str, float | int]]:
     started = time.monotonic()
     clean = clipped_client_gradient(
         model, pixels, labels, features, round_zero_based,
         cfg.clip, cfg.microbatch, device,
+        progress_callback=progress_callback,
     )
     local_seconds = time.monotonic() - started
 

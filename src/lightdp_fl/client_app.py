@@ -8,6 +8,7 @@ from .config import RunConfig
 from .data import load_client_data, resolve_device
 from .model import HybridClassifier, get_parameters, set_parameters
 from .privacy import Calibration
+from .progress import write_client_progress
 from .training import compute_client_upload
 
 
@@ -42,10 +43,22 @@ class LightDPClient(NumPyClient):
     ) -> tuple[list[np.ndarray], int, dict[str, Scalar]]:
         set_parameters(self.model, parameters)
         server_round = int(config.get("server_round", 1))
+        progress_dir = self.cfg.run_output_dir / "client_progress"
+        total_microbatches = (len(self.labels) + self.cfg.microbatch - 1) // self.cfg.microbatch
+        write_client_progress(
+            progress_dir, server_round, self.partition_id, 0, total_microbatches
+        )
         arrays, metrics = compute_client_upload(
             self.model, self.pixels, self.labels, self.features,
             self.cfg, self.partition_id, server_round - 1,
             _calibration_from_config(config), self.device,
+            progress_callback=lambda done, total: write_client_progress(
+                progress_dir, server_round, self.partition_id, done, total
+            ),
+        )
+        write_client_progress(
+            progress_dir, server_round, self.partition_id,
+            total_microbatches, total_microbatches, status="complete",
         )
         return arrays, len(self.labels), metrics
 
