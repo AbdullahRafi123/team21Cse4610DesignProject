@@ -12,3 +12,4 @@ max-records-per-client = 0
 partition-method = "iid"
 dirichlet-alpha = 0.5
 validation-fraction = 0.1
+round-timeout = 300.0

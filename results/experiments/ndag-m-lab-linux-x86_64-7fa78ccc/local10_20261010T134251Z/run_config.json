@@ -95,5 +95,75 @@
     "train_examples_used": 45000
   },
   "git_revision": "12442545cf1e675a7661055ecebc3b29fadd578b",
-  "git_worktree_dirty": true
+  "git_worktree_dirty": true,
+  "resume_events": [
+    {
+      "resumed_at_utc": "2026-10-10T14:55:37.999764+00:00",
+      "python": "3.12.2",
+      "dependencies": {
+        "flwr": "1.25.0",
+        "torch": "2.8.0+cu128",
+        "torchvision": "0.23.0+cu128",
+        "numpy": "2.5.2",
+        "scipy": "1.18.1",
+        "pandas": "3.0.6",
+        "matplotlib": "3.11.2",
+        "scikit-image": "0.26.0"
+      },
+      "cuda_available": true,
+      "cuda_devices": [
+        "NVIDIA GeForce RTX 3090"
+      ],
+      "selected_device": "cuda",
+      "run_id": "20261010T145538Z_ndag-m-lab-linux-x86_64-7fa78ccc_run0022_73c39325",
+      "run_number": 22,
+      "machine_id": "ndag-m-lab-linux-x86_64-7fa78ccc",
+      "hostname": "NDAG-M-Lab",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "machine_architecture": "x86_64",
+      "processor": "x86_64",
+      "git_revision": "a597db910e06713271d3b00f2caae144a0090e18",
+      "git_worktree_dirty": true
+    },
+    {
+      "resumed_at_utc": "2026-10-10T15:14:24.816341+00:00",
+      "python": "3.12.2",
+      "dependencies": {
+        "flwr": "1.25.0",
+        "torch": "2.8.0+cu128",
+        "torchvision": "0.23.0+cu128",
+        "numpy": "2.5.2",
+        "scipy": "1.18.1",
+        "pandas": "3.0.6",
+        "matplotlib": "3.11.2",
+        "scikit-image": "0.26.0"
+      },
+      "cuda_available": true,
+      "cuda_devices": [
+        "NVIDIA GeForce RTX 3090"
+      ],
+      "selected_device": "cuda",
+      "run_id": "20261010T151424Z_ndag-m-lab-linux-x86_64-7fa78ccc_run0023_e2707364",
+      "run_number": 23,
+      "machine_id": "ndag-m-lab-linux-x86_64-7fa78ccc",
+      "hostname": "NDAG-M-Lab",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "machine_architecture": "x86_64",
+      "processor": "x86_64",
+      "git_revision": "a597db910e06713271d3b00f2caae144a0090e18",
+      "git_worktree_dirty": true
+    }
+  ],
+  "git_tracking": {
+    "status": "staged",
+    "action": "git add; no commit created",
+    "files": [
+      "results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T134251Z/run_config.json",
+      "results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T134251Z/history.csv",
+      "results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T134251Z/train_rounds.csv",
+      "results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T134251Z/training.log",
+      "results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T134251Z/final_metrics.json"
+    ],
+    "staged_at_utc": "2026-10-10T15:11:27.917692+00:00"
+  }
 }

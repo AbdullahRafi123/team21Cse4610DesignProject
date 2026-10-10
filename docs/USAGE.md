@@ -290,12 +290,31 @@ configuration. They also add the environment's executable directory to
 
 ### One-click ten-client deployment launcher
 
-On Linux, double-click `launchers/start_10_client_lab.sh` in a terminal-capable
-file manager, or run it with `bash launchers/start_10_client_lab.sh`. It asks
-for the method, rounds, and device; creates or validates the coordinator TLS
-certificate; starts the SuperLink; opens ten local SuperNode terminal windows
-at once; and submits the chosen networked experiment. Clients receive IDs 0
-through 9 and use unique AppIO ports 9094 through 9103.
+The maintained same-host deployment guide and its copyable commands are in
+[Ten-client same-host Flower lab](TEN_CLIENT_LAB.md). It provides a
+non-interactive named-variant launcher, all ten maintained algorithms, smoke
+mode, and safe continuation instructions.
+
+`launchers/start_10_client_lab.sh` remains the interactive launcher. It
+creates or validates the coordinator TLS certificate, starts SuperLink, starts
+ten SuperNodes, and submits the chosen networked experiment. Clients receive
+IDs 0 through 9 and use unique AppIO ports 9094 through 9103. Add `--headless`
+to keep the SuperNodes in the background rather than opening ten terminal
+windows.
+
+The launcher gives synchronous rounds a 300-second timeout. It records actual
+client failures in `train_rounds.csv`; plain FedAvg aggregates the valid,
+example-weighted client updates when at least one is returned. Relaunch with
+`--replace`, choose **Continue**, and enter that run tag to reconnect all ten
+local clients and resume an interrupted run. Flower 1.25's Fleet API supports
+one request worker, while the ten SuperNodes still train in separate processes.
+
+Use `--smoke --headless` to verify the full ten-client path without opening
+terminals. It runs one IID FedAvg round with eight records per client, stores
+the normal run records, preserves ten per-client SuperNode logs, and writes
+`network_run_export.json` containing the Git revision, branch, and working-tree
+status. Fresh and completed runs automatically stage canonical metrics and
+provenance with Git; they never create a Git commit.
 
 The menu covers IID FedAvg, both non-IID partitions, clipped FedAvg, each
 privacy extension, and each privacy extension with clipped FedAvg. All menu

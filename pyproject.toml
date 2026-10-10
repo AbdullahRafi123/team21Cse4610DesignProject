@@ -78,6 +78,7 @@ batch-size = 32
 local-learning-rate = 0.01
 local-momentum = 0.9
 fraction-fit = 1.0
+round-timeout = 300.0
 max-records-per-client = 64
 use-pretrained = true
 cache-dir = ".cache/lightdp_flower"

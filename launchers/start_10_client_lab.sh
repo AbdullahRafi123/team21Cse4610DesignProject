@@ -8,16 +8,39 @@ CERTS_DIR="${HOME}/fedabba-certs"
 CLIENTS=10
 SMOKE=false
 HEADLESS=false
+REPLACE=false
+FORCE_FRESH=false
+EXPERIMENT=''
+RESUME_TAG=''
+ROUNDS_OVERRIDE=''
+DEVICE_OVERRIDE=''
+MAX_RECORDS_OVERRIDE=''
+ROUND_TIMEOUT_OVERRIDE=''
+DIRICHLET_ALPHA_OVERRIDE=''
 
 usage() {
   cat <<'EOF'
-Usage: launchers/start_10_client_lab.sh [--smoke] [--headless]
+Usage: launchers/start_10_client_lab.sh [options]
 
 Without options, opens ten client terminal windows and interactively starts a
 fresh or resumed ten-client Flower run. --smoke runs one IID FedAvg round with
 eight records per client. --headless starts the ten SuperNodes in the
 background instead of opening graphical terminal windows; it is useful for CI
 or an unattended smoke check.
+
+--replace stops existing Flower SuperLink and SuperNode processes from this
+project environment before starting the ten-client lab. Use it after a stalled
+or interrupted run.
+
+Non-interactive fresh runs:
+  --fresh --experiment NAME [--rounds N] [--device cuda|cpu|auto]
+  [--max-records-per-client N] [--round-timeout SECONDS]
+  [--dirichlet-alpha VALUE]
+
+NAME is one of: iid, dirichlet, label_shards, clipped_fedavg, vanilla_dp,
+smpc_dp, lightdp, clipped_vanilla_dp, clipped_smpc_dp, or clipped_lightdp.
+Use --resume-tag TAG to continue an interrupted run. --fresh and --resume-tag
+are non-interactive; --headless keeps all ten SuperNodes in the background.
 EOF
 }
 
@@ -25,6 +48,15 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --smoke) SMOKE=true; shift ;;
     --headless) HEADLESS=true; shift ;;
+    --replace) REPLACE=true; shift ;;
+    --fresh) FORCE_FRESH=true; shift ;;
+    --experiment) EXPERIMENT="${2:?--experiment requires a value}"; shift 2 ;;
+    --resume-tag) RESUME_TAG="${2:?--resume-tag requires a value}"; shift 2 ;;
+    --rounds) ROUNDS_OVERRIDE="${2:?--rounds requires a value}"; shift 2 ;;
+    --device) DEVICE_OVERRIDE="${2:?--device requires a value}"; shift 2 ;;
+    --max-records-per-client) MAX_RECORDS_OVERRIDE="${2:?--max-records-per-client requires a value}"; shift 2 ;;
+    --round-timeout) ROUND_TIMEOUT_OVERRIDE="${2:?--round-timeout requires a value}"; shift 2 ;;
+    --dirichlet-alpha) DIRICHLET_ALPHA_OVERRIDE="${2:?--dirichlet-alpha requires a value}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -42,6 +74,21 @@ require_free_ports() {
     echo "A required Flower port is already in use. Stop the existing Flower process first." >&2
     exit 1
   fi
+}
+
+stop_existing_flower() {
+  local process_id
+  while read -r process_id; do
+    [[ -n "$process_id" ]] && kill -INT "$process_id" 2>/dev/null || true
+  done < <(pgrep -f "^$VENV_DIR/bin/python $VENV_DIR/bin/flower-super(link|node)" || true)
+  for attempt in $(seq 1 20); do
+    if ! ss -ltn | grep -Eq ':(9091|9092|9093|9094|9095|9096|9097|9098|9099|9100|9101|9102|9103)[[:space:]]'; then
+      return
+    fi
+    sleep 1
+  done
+  echo 'Existing Flower processes did not release all required ports.' >&2
+  exit 1
 }
 
 create_certificate() {
@@ -137,13 +184,28 @@ if [[ ! -x "$VENV_DIR/bin/flower-superlink" ]]; then
 fi
 source "$VENV_DIR/bin/activate"
 
+if [[ "$FORCE_FRESH" == true && -n "$RESUME_TAG" ]]; then
+  echo '--fresh and --resume-tag cannot be used together.' >&2
+  exit 2
+fi
+if [[ -n "$EXPERIMENT" && -n "$RESUME_TAG" ]]; then
+  echo '--experiment and --resume-tag cannot be used together.' >&2
+  exit 2
+fi
+
+if [[ "$REPLACE" == true ]]; then
+  stop_existing_flower
+fi
+
 echo "FedAbba: ten-client Flower deployment"
 echo "This host will run one coordinator and ten simultaneous local Flower clients."
 coordinator_host='127.0.0.1'
 client_data_mode='partitioned_cifar10'
 
-if [[ "$SMOKE" == true ]]; then
+if [[ "$SMOKE" == true || "$FORCE_FRESH" == true || -n "$EXPERIMENT" ]]; then
   run_mode='fresh'
+elif [[ -n "$RESUME_TAG" ]]; then
+  run_mode='continue'
 else
   echo '1) Fresh run'
   echo '2) Continue an interrupted ten-client run'
@@ -156,7 +218,10 @@ else
 fi
 
 if [[ "$run_mode" == 'continue' ]]; then
-  resume_tag="$(prompt 'Interrupted run tag' '')"
+  resume_tag="$RESUME_TAG"
+  if [[ -z "$resume_tag" ]]; then
+    resume_tag="$(prompt 'Interrupted run tag' '')"
+  fi
   [[ -n "$resume_tag" ]] || { echo 'A run tag is required to continue.' >&2; exit 2; }
   run_tag="$resume_tag"
   max_records_per_client='0'
@@ -169,6 +234,24 @@ mkdir -p "$CLIENT_LOG_DIR"
 if [[ "$run_mode" == 'fresh' ]]; then
   if [[ "$SMOKE" == true ]]; then
     choice='1'
+  elif [[ -n "$EXPERIMENT" ]]; then
+    case "$EXPERIMENT" in
+      iid) choice='1' ;;
+      dirichlet) choice='2' ;;
+      label_shards) choice='3' ;;
+      clipped_fedavg) choice='4' ;;
+      vanilla_dp) choice='5' ;;
+      smpc_dp) choice='6' ;;
+      lightdp) choice='7' ;;
+      clipped_vanilla_dp) choice='8' ;;
+      clipped_smpc_dp) choice='9' ;;
+      clipped_lightdp) choice='10' ;;
+      *)
+        echo "Unknown experiment: $EXPERIMENT" >&2
+        echo 'Use --help to list experiment names.' >&2
+        exit 2
+        ;;
+    esac
   else
     echo
     echo "Experiment type"
@@ -205,7 +288,13 @@ if [[ "$run_mode" == 'fresh' ]]; then
   esac
 
   if [[ "$partition" == 'dirichlet' ]]; then
-    dirichlet_alpha="$(prompt 'Dirichlet alpha' '0.5')"
+    if [[ -n "$DIRICHLET_ALPHA_OVERRIDE" ]]; then
+      dirichlet_alpha="$DIRICHLET_ALPHA_OVERRIDE"
+    elif [[ -n "$EXPERIMENT" ]]; then
+      dirichlet_alpha='0.5'
+    else
+      dirichlet_alpha="$(prompt 'Dirichlet alpha' '0.5')"
+    fi
   else
     dirichlet_alpha='0.5'
   fi
@@ -213,10 +302,19 @@ if [[ "$run_mode" == 'fresh' ]]; then
     rounds='1'
     device='cuda'
     max_records_per_client='8'
+    round_timeout='120'
   else
-    rounds="$(prompt 'Server rounds' "$rounds")"
-    device="$(prompt 'Client device (cuda, cpu, or auto)' 'cuda')"
-    max_records_per_client="$(prompt 'Max records per client (0 means full partition)' '0')"
+    if [[ -n "$EXPERIMENT" || "$FORCE_FRESH" == true ]]; then
+      rounds="${ROUNDS_OVERRIDE:-$rounds}"
+      device="${DEVICE_OVERRIDE:-cuda}"
+      max_records_per_client="${MAX_RECORDS_OVERRIDE:-0}"
+      round_timeout="${ROUND_TIMEOUT_OVERRIDE:-300}"
+    else
+      rounds="$(prompt 'Server rounds' "$rounds")"
+      device="$(prompt 'Client device (cuda, cpu, or auto)' 'cuda')"
+      max_records_per_client="$(prompt 'Max records per client (0 means full partition)' '0')"
+      round_timeout="$(prompt 'Round timeout seconds' '300')"
+    fi
   fi
   [[ "$device" == 'cuda' || "$device" == 'cpu' || "$device" == 'auto' ]] || {
     echo 'Device must be cuda, cpu, or auto.' >&2; exit 2;
@@ -225,6 +323,12 @@ fi
 
 require_free_ports
 create_certificate "$coordinator_host"
+
+if [[ "$run_mode" == 'continue' ]]; then
+  python "$PROJECT_ROOT/scripts/run_network_experiment.py" \
+    --ca-cert "$CERTS_DIR/ca.crt" --clients "$CLIENTS" \
+    --resume-tag "$resume_tag" --preflight
+fi
 
 nohup flower-superlink \
   --ssl-ca-certfile "$CERTS_DIR/ca.crt" \
@@ -261,5 +365,5 @@ else
     --partition-method "$partition" --dirichlet-alpha "$dirichlet_alpha" \
     --client-data-mode "$client_data_mode" --device "$device" \
     --max-records-per-client "$max_records_per_client" --tag "$run_tag" \
-    --client-log-dir "$CLIENT_LOG_DIR"
+    --round-timeout "$round_timeout" --client-log-dir "$CLIENT_LOG_DIR"
 fi

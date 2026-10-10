@@ -56,6 +56,9 @@ review the staged files and commit them when ready.
   and runtime tuning.
 - [Multi-machine deployment guide](docs/USAGE.md#multi-machine-flower-deployment):
   SuperLink/SuperNode setup and client-local training data.
+- [Ten-client same-host Flower lab](docs/TEN_CLIENT_LAB.md): non-interactive
+  ten-client networked runs, all maintained method variants, continuation, and
+  diagnostic records.
 - [Results index](results/experiments/README.md): active run artifacts and
   provenance expectations.
 

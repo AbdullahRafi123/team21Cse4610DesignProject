@@ -1,0 +1,28 @@
+{
+  "exported_at_utc": "2026-10-10T14:53:28.856988+00:00",
+  "tag": "local10_20261010T145312Z",
+  "client_logs_copied": true,
+  "client_log_source": "/home/ndag/Desktop/Fed Abba/results/network-client-logs/local10_20261010T145312Z",
+  "git": {
+    "revision": "a597db910e06713271d3b00f2caae144a0090e18",
+    "branch": "main",
+    "status": [
+      "M configs/full_lightdp.toml",
+      " M configs/full_no_dp.toml",
+      " M docs/USAGE.md",
+      " M launchers/start_10_client_lab.sh",
+      " M pyproject.toml",
+      "A  results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T134251Z/network_run_export.json",
+      " M results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T134251Z/training.log",
+      "A  results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T145312Z/final_metrics.json",
+      "A  results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T145312Z/history.csv",
+      "A  results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T145312Z/run_config.json",
+      "A  results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T145312Z/train_rounds.csv",
+      "A  results/experiments/ndag-m-lab-linux-x86_64-7fa78ccc/local10_20261010T145312Z/training.log",
+      " M scripts/run_network_experiment.py",
+      " M src/lightdp_fl/config.py",
+      " M src/lightdp_fl/server_app.py",
+      " M src/lightdp_fl/strategy.py"
+    ]
+  }
+}

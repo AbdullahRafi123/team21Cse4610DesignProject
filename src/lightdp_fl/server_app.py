@@ -498,7 +498,7 @@ def server_fn(context: Context) -> ServerAppComponents:
                 min_available_clients=cfg.num_clients,
                 on_fit_config_fn=fit_config,
                 evaluate_fn=evaluate_fn,
-                accept_failures=False,
+                accept_failures=True,
             )
         else:
             min_fit = cfg.num_clients - cfg.max_stragglers
@@ -523,7 +523,13 @@ def server_fn(context: Context) -> ServerAppComponents:
     session_rounds = remaining_rounds
     training_started = time.monotonic()
 
-    return ServerAppComponents(strategy=strategy, config=ServerConfig(num_rounds=remaining_rounds))
+    return ServerAppComponents(
+        strategy=strategy,
+        config=ServerConfig(
+            num_rounds=remaining_rounds,
+            round_timeout=cfg.round_timeout,
+        ),
+    )
 
 
 app = ServerApp(server_fn=server_fn)

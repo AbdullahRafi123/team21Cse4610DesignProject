@@ -21,6 +21,15 @@ This file applies to the entire repository. Read it before changing code, experi
 - Keep archived output separate from active code. Remove an artifact only when it is demonstrably redundant or reproducibly regenerable; explain removals that affect research provenance.
 - Do not rewrite shared Git history or force-push unless the user explicitly asks for it.
 
+## Same-host Flower deployment
+
+- `launchers/start_10_client_lab.sh` is the supported same-host deployment: one Flower SuperLink coordinator and ten separately running local SuperNodes. It exercises the networked Flower client/server path, while remaining a same-machine experiment rather than evidence about physical network conditions.
+- `launchers/run_10_client_variant.sh` is the non-interactive entry point for named ten-client variants. Keep its accepted variant names and [the ten-client lab guide](docs/TEN_CLIENT_LAB.md) synchronized with the maintained algorithms.
+- Use `--smoke --headless` only to validate the deployment path. Record it as a smoke test, not as a research result.
+- Use `--replace` after an interrupted deployment. Select **Continue** only for a tag whose saved FedAvg checkpoint is below the configured round count. A completed tag must stay immutable; start a fresh run for another 30 rounds.
+- Keep coordinator records under `results/experiments/<machine-id>/<tag>/`. The launcher exports `network_run_export.json`; per-client process logs are copied to `client_logs/` for local diagnosis and remain ignored by Git.
+- Do not manually alter checkpoint, round-history, client-progress, or final-metric files. Diagnose failures from `training.log`, `client_logs/`, and the saved configuration, then create a new reproducible run when a replacement is needed.
+
 ## Review and reporting
 
 - Read the relevant code, configuration, and existing result provenance before editing.

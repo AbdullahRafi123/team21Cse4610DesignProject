@@ -1,0 +1,10 @@
+{
+  "round": 30,
+  "test_loss": 0.5837693214416504,
+  "test_accuracy": 82.260000705719,
+  "test_evaluations": 1,
+  "selected_validation_round": 30,
+  "selected_validation_accuracy": 82.19999670982361,
+  "validation_examples": 5000,
+  "test_examples": 10000
+}

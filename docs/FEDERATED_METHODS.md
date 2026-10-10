@@ -64,7 +64,9 @@ parameters. The local optimizer is recreated each round. Current controls are
 `fraction-fit`.
 
 Plain FedAvg uses `method = "no_dp"`, example-count-weighted model averaging,
-and no client-update clipping. Privacy variants also use this local-SGD
+and no client-update clipping. It aggregates valid client updates if a
+connected client fails during a round, and records the failure count with that
+round. Privacy variants also use this local-SGD
 training path, then clip each client's final model delta to
 `client-update-clip` before applying noise or the simulated mask mechanism.
 The current privacy strategy uniformly averages protected client updates.

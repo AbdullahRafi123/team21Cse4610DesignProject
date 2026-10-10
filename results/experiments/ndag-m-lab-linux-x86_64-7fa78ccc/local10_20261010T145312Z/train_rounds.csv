@@ -1,0 +1,2 @@
+round,active_clients,examples,training_algorithm,aggregation,local_epochs,learning_rate,weighted_train_loss,mean_client_local_seconds,failures
+1,10,80,fedavg,example_weighted_fedavg,1,0.01,2.3031114101409913,0.4108603133998258,0

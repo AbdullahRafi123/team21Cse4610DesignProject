@@ -73,6 +73,8 @@ class StandardFedAvgStrategy(FedAvg):
                     saved_config.pop(removed_key, None)
             if isinstance(saved_config, dict) and "git_track_results" not in saved_config:
                 expected.pop("git_track_results", None)
+            if isinstance(saved_config, dict) and "round_timeout" not in saved_config:
+                expected.pop("round_timeout", None)
             if saved_config != expected:
                 raise ValueError("FedAvg resume configuration differs from the saved run")
             self.resume_round = int(checkpoint["round"])

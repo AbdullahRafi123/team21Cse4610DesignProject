@@ -37,6 +37,7 @@ class RunConfig:
     local_learning_rate: float = 0.01
     local_momentum: float = 0.9
     fraction_fit: float = 1.0
+    round_timeout: float = 300.0
     max_records_per_client: int = 0
     use_pretrained: bool = True
     cache_dir: str = ".cache/lightdp_flower"
@@ -85,6 +86,7 @@ class RunConfig:
             local_learning_rate=float(cfg.get("local-learning-rate", 0.01)),
             local_momentum=float(cfg.get("local-momentum", 0.9)),
             fraction_fit=float(cfg.get("fraction-fit", 1.0)),
+            round_timeout=float(cfg.get("round-timeout", 300.0)),
             max_records_per_client=int(cfg.get("max-records-per-client", 0)),
             use_pretrained=bool(cfg.get("use-pretrained", True)),
             cache_dir=str(cfg.get("cache-dir", ".cache/lightdp_flower")),
@@ -187,6 +189,8 @@ class RunConfig:
             raise ValueError("local-momentum must be in [0, 1)")
         if not 0.0 < self.fraction_fit <= 1.0:
             raise ValueError("fraction-fit must be in (0, 1]")
+        if not math.isfinite(self.round_timeout) or self.round_timeout <= 0:
+            raise ValueError("round-timeout must be finite and > 0")
         if not 0.0 < self.delta < 1.0:
             raise ValueError("delta must be between 0 and 1")
         if not math.isfinite(self.epsilon):

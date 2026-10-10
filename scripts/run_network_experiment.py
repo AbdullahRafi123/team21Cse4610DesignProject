@@ -15,6 +15,8 @@ from pathlib import Path
 import shutil
 import subprocess
 
+import torch
+
 from lightdp_fl.flower_cli import find_flower_cli, run_flower_app, serialize_run_config
 from lightdp_fl.config import RunConfig
 from lightdp_fl.run_tracking import machine_id
@@ -61,6 +63,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=0.01)
     parser.add_argument("--momentum", type=float, default=0.9)
     parser.add_argument("--max-records-per-client", type=int, default=0)
+    parser.add_argument(
+        "--round-timeout",
+        type=float,
+        default=300.0,
+        help="Fail a stalled synchronous round after this many seconds (default: 300).",
+    )
     parser.add_argument("--client-update-clip", type=float, default=1.0)
     parser.add_argument("--clip", type=float, default=1.0)
     parser.add_argument("--max-colluders", type=int, default=1)
@@ -71,6 +79,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--resume-tag",
         help="Resume this interrupted run tag using its recorded configuration.",
+    )
+    parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="Validate a resumed run without submitting it to Flower.",
     )
     parser.add_argument(
         "--client-log-dir",
@@ -90,15 +103,27 @@ def find_run_dir(tag: str) -> Path:
 
 
 def recorded_resume_config(tag: str) -> tuple[str, int]:
-    """Recreate the exact saved configuration accepted by the FedAvg checkpoint."""
-    metadata = json.loads((find_run_dir(tag) / "run_config.json").read_text(encoding="utf-8"))
+    """Recreate configuration only when the saved run still has rounds remaining."""
+    run_dir = find_run_dir(tag)
+    metadata = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
+    checkpoint_path = run_dir / "checkpoints" / "fedavg_server_checkpoint.pt"
+    if not checkpoint_path.is_file():
+        raise SystemExit(
+            f"Cannot continue tag={tag!r}: checkpoint is missing: {checkpoint_path}"
+        )
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    completed_round = int(checkpoint.get("round", 0))
+    target_rounds = int(metadata["num_server_rounds"])
+    if completed_round >= target_rounds:
+        raise SystemExit(
+            f"Run tag={tag!r} is already complete at round {completed_round}/{target_rounds}. "
+            "Choose a fresh run."
+        )
     values = {
         field.name.replace("_", "-"): metadata[field.name]
         for field in fields(RunConfig)
         if field.name != "resume" and field.name in metadata
     }
-    if len(values) != len(fields(RunConfig)) - 1:
-        raise SystemExit("Saved run configuration is incomplete and cannot be resumed safely.")
     values["resume"] = True
     return serialize_run_config(values), int(metadata["num_clients"])
 
@@ -152,6 +177,24 @@ def export_network_artifacts(tag: str, client_log_dir: Path | None) -> None:
         print(f"Exported network logs and Git context: {export_path}", flush=True)
 
 
+def verify_completed_network_run(tag: str) -> None:
+    """Reject a Flower CLI success when the ServerApp did not finish the run."""
+    run_dir = find_run_dir(tag)
+    metadata = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
+    checkpoint_path = run_dir / "checkpoints" / "fedavg_server_checkpoint.pt"
+    if not checkpoint_path.is_file():
+        raise RuntimeError(f"Network run {tag!r} did not create a FedAvg checkpoint")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    completed_round = int(checkpoint.get("round", 0))
+    target_rounds = int(metadata["num_server_rounds"])
+    final_metrics = run_dir / "final_metrics.json"
+    if completed_round != target_rounds or not final_metrics.is_file():
+        raise RuntimeError(
+            f"Network run {tag!r} stopped at round {completed_round}/{target_rounds}; "
+            "client logs remain available for diagnosis and the checkpoint can be resumed."
+        )
+
+
 def main() -> None:
     """Validate coordinator inputs and submit a streaming Flower run."""
     args = parse_args()
@@ -194,11 +237,17 @@ def main() -> None:
                 "local-learning-rate": args.learning_rate,
                 "local-momentum": args.momentum,
                 "max-records-per-client": args.max_records_per_client,
+                "round-timeout": args.round_timeout,
                 "device": args.device,
                 "tag": args.tag,
                 "git-track-results": not args.no_git_track_results,
             }
         )
+    if args.preflight:
+        if not args.resume_tag:
+            raise SystemExit("--preflight requires --resume-tag")
+        print(f"Resume preflight passed for tag={run_tag!r}.", flush=True)
+        return
     print(
         "Submitting networked Flower run: "
         f"algorithm={args.algorithm}, method={args.method}, "
@@ -213,6 +262,7 @@ def main() -> None:
         cli=find_flower_cli(),
     )
     if run_tag != "auto":
+        verify_completed_network_run(run_tag)
         export_network_artifacts(run_tag, args.client_log_dir)
 
 
