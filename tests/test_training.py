@@ -1,52 +1,44 @@
+from __future__ import annotations
+
 import torch
 
-from lightdp_fl.model import HybridClassifier
-from lightdp_fl.training import _functional_helpers, clipped_client_gradient
+from lightdp_fl.config import RunConfig
+from lightdp_fl.model import HybridClassifier, get_parameters
+from lightdp_fl.training import train_clipped_fedavg_client
 
 
-def _concatenated_reference(
-    model: HybridClassifier,
-    pixels: torch.Tensor,
-    labels: torch.Tensor,
-    features: torch.Tensor,
-    clip: float,
-    microbatch: int,
-) -> torch.Tensor:
-    """Reference implementation retaining the original full-gradient concatenation."""
-    names, buffers, _, per_example = _functional_helpers(model)
-    params = dict(model.named_parameters())
-    total = torch.zeros(sum(param.numel() for param in params.values()))
-
-    for start in range(0, len(labels), microbatch):
-        x = pixels[start : start + microbatch]
-        feat = features[0, start : start + microbatch]
-        y = labels[start : start + microbatch]
-        gradients = per_example(params, buffers, x, feat, y)
-        flat = torch.cat([gradients[name].flatten(1) for name in names], dim=1)
-        norms = flat.norm(dim=1).clamp_min(1e-12)
-        factors = (clip / norms).clamp(max=1.0)
-        total.add_((flat * factors[:, None]).sum(dim=0).detach())
-
-    return total / len(labels)
-
-
-def test_layerwise_clipping_matches_concatenated_reference() -> None:
+def test_clipped_fedavg_trains_locally_and_reports_progress() -> None:
     torch.manual_seed(23)
     model = HybridClassifier()
-    pixels = torch.rand(5, 3, 32, 32)
-    labels = torch.tensor([0, 2, 4, 6, 8])
-    features = torch.randn(2, len(labels), 512)
+    initial = get_parameters(model)
+    cfg = RunConfig(
+        num_clients=1,
+        max_colluders=0,
+        max_stragglers=0,
+        local_epochs=1,
+        batch_size=2,
+        local_learning_rate=0.01,
+        clip=1e-6,
+    )
+    pixels = torch.rand(2, 3, 32, 32)
+    labels = torch.tensor([1, 4])
+    features = torch.randn(2, 2, 512)
+    progress: list[tuple[int, int]] = []
 
-    actual = clipped_client_gradient(
+    metrics = train_clipped_fedavg_client(
         model,
         pixels,
         labels,
         features,
-        round_zero_based=0,
-        clip=0.05,
-        microbatch=2,
+        cfg,
+        partition_id=0,
+        server_round=1,
         device=torch.device("cpu"),
+        progress_callback=lambda done, total: progress.append((done, total)),
     )
-    expected = _concatenated_reference(model, pixels, labels, features, 0.05, 2)
 
-    torch.testing.assert_close(actual, expected, rtol=2e-5, atol=1e-6)
+    updated = get_parameters(model)
+    assert any(not torch.equal(torch.from_numpy(before), torch.from_numpy(after))
+               for before, after in zip(initial, updated, strict=True))
+    assert progress == [(1, 1)]
+    assert metrics["train_loss"] > 0

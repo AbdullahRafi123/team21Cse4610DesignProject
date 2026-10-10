@@ -57,7 +57,7 @@ def start_progress_monitor(
     training_log: Path,
     num_clients: int,
     num_rounds: int,
-) -> threading.Event:
+) -> Callable[[], None]:
     """Print a live aggregate microbatch bar and periodically retain it in the log."""
     stop = threading.Event()
 
@@ -105,5 +105,13 @@ def start_progress_monitor(
                     log.write(f"{datetime.now(timezone.utc).isoformat()} {message}\n")
                 last_logged = now
 
-    threading.Thread(target=monitor, name="client-progress-monitor", daemon=True).start()
-    return stop
+    thread = threading.Thread(
+        target=monitor, name="client-progress-monitor", daemon=True
+    )
+    thread.start()
+
+    def stop_monitor() -> None:
+        stop.set()
+        thread.join()
+
+    return stop_monitor

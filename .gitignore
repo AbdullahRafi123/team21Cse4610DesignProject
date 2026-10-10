@@ -18,6 +18,10 @@ data/
 *.pth
 .ray/
 ray_results/
+results/experiments/**/client_progress/
+results/experiments/**/checkpoints/
+results/experiments/**/client_logs/
+results/network-client-logs/
 
 # Editor and operating-system files
 .DS_Store
@@ -26,3 +30,8 @@ Thumbs.db
 .idea/
 .env
 .env.*
+
+# Local coordinator TLS material and launcher logs
+fedabba-certs/
+*.csr
+*.srl

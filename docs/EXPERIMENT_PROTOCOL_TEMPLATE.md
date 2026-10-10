@@ -13,6 +13,7 @@
 - Primary outcome and unit:
 - Secondary outcomes:
 - Confirmatory or exploratory:
+- Federated algorithm (for example FedAvg) and update/aggregation definition:
 
 ## Methods
 
@@ -21,8 +22,11 @@
 - Threat model and assumptions:
 - Model architecture and pretrained assets:
 - Dataset source/version/license:
-- Split, client partition, preprocessing, and augmentation:
-- Training/evaluation procedure:
+- Train/validation/test split and selection rule:
+- Client partition, preprocessing, and augmentation:
+- Training/evaluation procedure (including which splits are evaluated per round):
+- Checkpoint selection and the point at which the test split is evaluated:
+- Client sampling fraction, local epochs, optimizer, learning rate, and batch size:
 
 ## Planned runs
 

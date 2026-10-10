@@ -2,10 +2,12 @@ import torch
 
 from lightdp_fl.config import RunConfig
 from lightdp_fl.model import HybridClassifier, get_parameters
-from lightdp_fl.strategy import GradientMomentumStrategy
+from flwr.common import ndarrays_to_parameters
+
+from lightdp_fl.strategy import StandardFedAvgStrategy
 
 
-def test_server_checkpoint_restores_round_parameters_and_momentum(tmp_path) -> None:
+def test_fedavg_checkpoint_restores_round_and_parameters(tmp_path) -> None:
     common = {
         "num_clients": 5,
         "max_colluders": 1,
@@ -16,14 +18,17 @@ def test_server_checkpoint_restores_round_parameters_and_momentum(tmp_path) -> N
         "tag": "resume_check",
     }
     initial_arrays = get_parameters(HybridClassifier())
-    fresh = GradientMomentumStrategy(RunConfig(**common), initial_arrays, None)
-    fresh.current.fill_(0.25)
-    fresh.velocity.fill_(-0.5)
-    fresh._save_checkpoint(server_round=2)
+    fresh = StandardFedAvgStrategy(RunConfig(**common), initial_arrays)
+    expected = [array.copy() for array in initial_arrays]
+    for array in expected:
+        array.fill(0.25)
+    fresh._save_checkpoint(2, ndarrays_to_parameters(expected))
 
     resumed_config = RunConfig(**common, resume=True)
-    resumed = GradientMomentumStrategy(resumed_config, initial_arrays, None)
+    resumed = StandardFedAvgStrategy(resumed_config, initial_arrays)
 
     assert resumed.resume_round == 2
-    torch.testing.assert_close(resumed.current, torch.full_like(resumed.current, 0.25))
-    torch.testing.assert_close(resumed.velocity, torch.full_like(resumed.velocity, -0.5))
+    checkpoint = torch.load(resumed.checkpoint_path, map_location="cpu", weights_only=True)
+    restored = [tensor.numpy() for tensor in checkpoint["parameters"]]
+    for actual, wanted in zip(restored, expected, strict=True):
+        torch.testing.assert_close(torch.from_numpy(actual), torch.from_numpy(wanted))

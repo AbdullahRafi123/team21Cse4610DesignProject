@@ -10,7 +10,15 @@ from dataclasses import asdict
 
 import numpy as np
 import torch
-from flwr.common import FitRes, Parameters, Scalar, ndarrays_to_parameters, parameters_to_ndarrays
+from flwr.common import (
+    FitIns,
+    FitRes,
+    Parameters,
+    Scalar,
+    ndarrays_to_parameters,
+    parameters_to_ndarrays,
+)
+from flwr.server.client_manager import ClientManager
 from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy import FedAvg
 
@@ -20,75 +28,64 @@ from .privacy import Calibration, eps_from_rho
 from .run_tracking import machine_id
 
 
-class GradientMomentumStrategy(FedAvg):
-    """Aggregate protected client gradients, then apply notebook server momentum."""
-    def __init__(self, cfg: RunConfig, initial_arrays: list[np.ndarray], calibration: Calibration | None, **kwargs: Any):
-        self.device = torch.device("cpu")
-        self.model_template = HybridClassifier()
+def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    """Write a nonempty sequence of uniform records as a CSV file."""
+    if not rows:
+        return
+    with path.open("w", newline="", encoding="utf-8") as output_file:
+        writer = csv.DictWriter(output_file, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+class StandardFedAvgStrategy(FedAvg):
+    """Flower FedAvg with per-round provenance and resumable global weights."""
+
+    def __init__(
+        self,
+        cfg: RunConfig,
+        initial_arrays: list[np.ndarray],
+        **kwargs: Any,
+    ) -> None:
+        self.cfg = cfg
         self.out = cfg.run_output_dir
         self.out.mkdir(parents=True, exist_ok=True)
         self.checkpoint_dir = cfg.checkpoint_dir
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        self.checkpoint_path = self.checkpoint_dir / "server_checkpoint.pt"
-        self.legacy_checkpoint_path = self.out / "server_checkpoint.pt"
+        self.checkpoint_path = self.checkpoint_dir / "fedavg_server_checkpoint.pt"
         self.resume_round = 0
-
         if cfg.resume:
-            checkpoint = self._load_checkpoint(cfg)
-            self.resume_round = int(checkpoint["round"])
-            self.current = checkpoint["parameters"].to(device=self.device, dtype=torch.float32)
-            self.velocity = checkpoint["velocity"].to(device=self.device, dtype=torch.float32)
-            expected_shapes = [list(parameter.shape) for parameter in self.model_template.parameters()]
-            parameter_count = sum(parameter.numel() for parameter in self.model_template.parameters())
-            if (
-                checkpoint.get("parameter_shapes") != expected_shapes
-                or self.current.numel() != parameter_count
-                or self.velocity.shape != self.current.shape
-            ):
-                raise ValueError("Resume checkpoint parameter or momentum shapes do not match this model")
-            if self.resume_round >= cfg.num_server_rounds:
-                raise ValueError(
-                    f"Checkpoint is already at round {self.resume_round}; target is {cfg.num_server_rounds}"
+            checkpoint = torch.load(
+                self.checkpoint_path, map_location="cpu", weights_only=True
+            )
+            if checkpoint.get("schema_version") != 1:
+                raise ValueError("Unsupported FedAvg checkpoint schema")
+            if checkpoint.get("machine_id") != machine_id():
+                raise RuntimeError(
+                    "FedAvg checkpoints can only be resumed on their originating machine"
                 )
-            initial_arrays = flat_to_arrays(self.current, self.model_template)
-        else:
-            self.current = arrays_to_flat(initial_arrays, self.device)
-            self.velocity = torch.zeros_like(self.current)
-
-        super().__init__(initial_parameters=ndarrays_to_parameters(initial_arrays), **kwargs)
-        self.cfg = cfg
-        self.calibration = calibration
+            expected = asdict(cfg)
+            expected.pop("resume", None)
+            saved_config = checkpoint.get("config")
+            if isinstance(saved_config, dict):
+                saved_config = dict(saved_config)
+                for removed_key in ("learning_rate", "momentum", "microbatch"):
+                    saved_config.pop(removed_key, None)
+            if isinstance(saved_config, dict) and "git_track_results" not in saved_config:
+                expected.pop("git_track_results", None)
+            if saved_config != expected:
+                raise ValueError("FedAvg resume configuration differs from the saved run")
+            self.resume_round = int(checkpoint["round"])
+            initial_arrays = [
+                tensor.cpu().numpy().copy() for tensor in checkpoint["parameters"]
+            ]
+            if self.resume_round >= cfg.num_server_rounds:
+                raise ValueError("FedAvg checkpoint has already reached the configured round count")
         self.train_history = self._load_train_history(self.resume_round) if cfg.resume else []
-        self._write_metadata()
-
-    def _load_checkpoint(self, cfg: RunConfig) -> dict[str, Any]:
-        checkpoint_path = (
-            self.checkpoint_path
-            if self.checkpoint_path.is_file()
-            else self.legacy_checkpoint_path
+        super().__init__(
+            initial_parameters=ndarrays_to_parameters(initial_arrays),
+            **kwargs,
         )
-        if not checkpoint_path.is_file():
-            raise FileNotFoundError(
-                f"Resume was requested but no checkpoint exists at {self.checkpoint_path}"
-            )
-        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-        if checkpoint.get("schema_version") != 1:
-            raise ValueError("Unsupported or incomplete server checkpoint schema")
-        checkpoint_machine_id = checkpoint.get("machine_id")
-        if checkpoint_machine_id != machine_id():
-            raise RuntimeError(
-                "This checkpoint can only be resumed on its originating machine. "
-                f"Checkpoint machine_id={checkpoint_machine_id!r}; "
-                f"current machine_id={machine_id()!r}. Start a new run on this machine."
-            )
-        expected_config = asdict(cfg)
-        expected_config.pop("resume", None)
-        if checkpoint.get("config") != expected_config:
-            raise ValueError(
-                "Resume configuration differs from the checkpoint. Keep the same experiment "
-                "settings, output tag, and total round count when resuming."
-            )
-        return checkpoint
 
     def _load_train_history(self, through_round: int) -> list[dict[str, Any]]:
         path = self.out / "train_rounds.csv"
@@ -100,19 +97,62 @@ class GradientMomentumStrategy(FedAvg):
                 if int(row["round"]) <= through_round
             ]
 
-    def _save_checkpoint(self, server_round: int) -> None:
+    def aggregate_fit(
+        self,
+        server_round: int,
+        results: list[tuple[ClientProxy, FitRes]],
+        failures: list[tuple[ClientProxy, FitRes] | BaseException],
+    ) -> tuple[Parameters | None, dict[str, Scalar]]:
+        if failures and not self.accept_failures:
+            raise RuntimeError(
+                f"FedAvg round {self.resume_round + server_round} had client failures"
+            )
+        if not results:
+            raise RuntimeError(
+                f"FedAvg round {self.resume_round + server_round} returned no client results"
+            )
+        parameters, metrics = super().aggregate_fit(server_round, results, failures)
+        if parameters is None:
+            return None, metrics
+
+        global_round = self.resume_round + server_round
+        successful = [fit_res for _, fit_res in results]
+        examples = sum(result.num_examples for result in successful)
+        train_times = [float(result.metrics.get("local_seconds", 0.0)) for result in successful]
+        weighted_loss = sum(
+            float(result.metrics.get("train_loss", 0.0)) * result.num_examples
+            for result in successful
+        ) / max(examples, 1)
+        row: dict[str, Any] = {
+            "round": global_round,
+            "active_clients": len(successful),
+            "examples": examples,
+            "training_algorithm": self.cfg.training_algorithm,
+            "aggregation": "example_weighted_fedavg",
+            "local_epochs": self.cfg.local_epochs,
+            "learning_rate": self.cfg.local_learning_rate,
+            "weighted_train_loss": weighted_loss,
+            "mean_client_local_seconds": float(np.mean(train_times)) if train_times else 0.0,
+            "failures": len(failures),
+        }
+        self.train_history.append(row)
+        _write_csv(self.out / "train_rounds.csv", self.train_history)
+        self._save_checkpoint(global_round, parameters)
+        return parameters, {**metrics, "weighted_train_loss": weighted_loss}
+
+    def _save_checkpoint(self, server_round: int, parameters: Parameters) -> None:
+        tensors = [
+            torch.from_numpy(array.copy())
+            for array in parameters_to_ndarrays(parameters)
+        ]
         checkpoint = {
             "schema_version": 1,
             "machine_id": machine_id(),
             "round": server_round,
-            "parameters": self.current.detach().cpu(),
-            "velocity": self.velocity.detach().cpu(),
-            "parameter_shapes": [
-                list(parameter.shape) for parameter in self.model_template.parameters()
-            ],
+            "parameters": tensors,
             "config": {key: value for key, value in asdict(self.cfg).items() if key != "resume"},
         }
-        with NamedTemporaryFile(dir=self.out, suffix=".tmp", delete=False) as temp_file:
+        with NamedTemporaryFile(dir=self.checkpoint_dir, suffix=".tmp", delete=False) as temp_file:
             temp_path = Path(temp_file.name)
         try:
             torch.save(checkpoint, temp_path)
@@ -120,11 +160,30 @@ class GradientMomentumStrategy(FedAvg):
         finally:
             temp_path.unlink(missing_ok=True)
 
-    def _write_metadata(self) -> None:
-        path = self.out / "run_config.json"
-        data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else dict(self.cfg.__dict__)
-        data["calibration"] = None if self.calibration is None else self.calibration.to_dict()
-        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+class PrivateFedAvgStrategy(StandardFedAvgStrategy):
+    """Apply privacy mechanisms to clipped local-SGD model deltas.
+
+    Private updates are uniformly averaged across participating clients. This
+    is intentionally distinct from example-weighted FedAvg because the current
+    research mechanisms and calibration assume equal client contribution.
+    """
+
+    def __init__(self, cfg: RunConfig, initial_arrays: list[np.ndarray], **kwargs: Any):
+        self.model_template = HybridClassifier()
+        self.round_start_arrays: list[np.ndarray] | None = None
+        super().__init__(cfg, initial_arrays, **kwargs)
+
+    def configure_fit(
+        self,
+        server_round: int,
+        parameters: Parameters,
+        client_manager: ClientManager,
+    ) -> list[tuple[ClientProxy, FitIns]]:
+        self.round_start_arrays = [
+            array.copy() for array in parameters_to_ndarrays(parameters)
+        ]
+        return super().configure_fit(server_round, parameters, client_manager)
 
     def aggregate_fit(
         self,
@@ -132,65 +191,74 @@ class GradientMomentumStrategy(FedAvg):
         results: list[tuple[ClientProxy, FitRes]],
         failures: list[tuple[ClientProxy, FitRes] | BaseException],
     ) -> tuple[Parameters | None, dict[str, Scalar]]:
-        if failures:
-            raise RuntimeError(
-                f"Aborting round {self.resume_round + server_round}: "
-                f"{len(failures)} client fit(s) failed"
-            )
-        if not results:
-            raise RuntimeError(
-                f"Aborting round {self.resume_round + server_round}: "
-                "no client fit results were returned"
-            )
-
         global_round = self.resume_round + server_round
-        active_vectors: list[torch.Tensor] = []
-        local_times: list[float] = []
-        noise_times: list[float] = []
-        stragglers = None
-        for _, fit_res in results:
-            metrics = fit_res.metrics
-            if int(metrics.get("active", 1)) != 1:
-                stragglers = int(metrics.get("stragglers", 0))
-                continue
-            arrays = parameters_to_ndarrays(fit_res.parameters)
-            active_vectors.append(arrays_to_flat(arrays, self.device))
-            local_times.append(float(metrics.get("local_seconds", 0.0)))
-            noise_times.append(float(metrics.get("noise_seconds", 0.0)))
-            stragglers = int(metrics.get("stragglers", 0))
+        active_results = [
+            result for _, result in results if int(result.metrics.get("active", 1)) == 1
+        ]
+        missing = len(failures) + len(results) - len(active_results)
+        if missing > self.cfg.max_stragglers:
+            raise RuntimeError(
+                f"Private FedAvg round {global_round} observed {missing} missing clients; "
+                f"configured privacy bound is {self.cfg.max_stragglers}"
+            )
+        if not active_results:
+            raise RuntimeError(f"Private FedAvg round {global_round} has no client updates")
+        if self.round_start_arrays is None:
+            raise RuntimeError("Private FedAvg has no saved round-start model parameters")
 
-        if not active_vectors:
-            raise RuntimeError("All clients were simulated as stragglers; notebook schedule should prevent this")
-
-        gradient = torch.stack(active_vectors).mean(0)
-        self.velocity.mul_(self.cfg.momentum).add_(gradient)
-        t = global_round - 1
-        lr = self.cfg.learning_rate * (
-            0.2 + 0.8 * (1.0 + math.cos(math.pi * t / self.cfg.num_server_rounds)) / 2.0
+        device = torch.device("cpu")
+        client_updates = [
+            arrays_to_flat(parameters_to_ndarrays(result.parameters), device)
+            for result in active_results
+        ]
+        mean_update = torch.stack(client_updates).mean(dim=0)
+        base = arrays_to_flat(self.round_start_arrays, device)
+        parameters = ndarrays_to_parameters(
+            flat_to_arrays(base + mean_update, self.model_template)
         )
-        self.current = self.current - lr * self.velocity
-        arrays = flat_to_arrays(self.current, self.model_template)
-        params = ndarrays_to_parameters(arrays)
 
-        row = {
+        examples = sum(result.num_examples for result in active_results)
+        successful = len(active_results)
+        losses = [
+            float(result.metrics.get("train_loss", 0.0)) for result in active_results
+        ]
+        update_norms = [
+            float(result.metrics.get("update_norm", 0.0))
+            for result in active_results
+        ]
+        train_times = [
+            float(result.metrics.get("local_seconds", 0.0))
+            for result in active_results
+        ]
+        row: dict[str, Any] = {
             "round": global_round,
-            "active_clients": len(active_vectors),
-            "stragglers": int(stragglers or 0),
-            "learning_rate": lr,
-            "mean_client_local_seconds": float(np.mean(local_times)) if local_times else 0.0,
-            "mean_client_noise_seconds": float(np.mean(noise_times)) if noise_times else 0.0,
+            "active_clients": successful,
+            "missing_clients": missing,
+            "examples": examples,
+            "training_algorithm": self.cfg.training_algorithm,
+            "aggregation": "uniform_client_mean",
+            "privacy_method": self.cfg.method,
+            "client_update_clip": self.cfg.client_update_clip,
+            "mean_preclip_update_norm": (
+                float(np.mean(update_norms)) if update_norms else 0.0
+            ),
+            "clients_clipped": sum(
+                int(result.metrics.get("update_clipped", 0))
+                for result in active_results
+            ),
+            "local_epochs": self.cfg.local_epochs,
+            "learning_rate": self.cfg.local_learning_rate,
+            "mean_train_loss": float(np.mean(losses)) if losses else 0.0,
+            "mean_client_local_seconds": (
+                float(np.mean(train_times)) if train_times else 0.0
+            ),
             "failures": len(failures),
         }
         self.train_history.append(row)
-        self._write_csv(self.out / "train_rounds.csv", self.train_history)
-        self._save_checkpoint(global_round)
-        return params, {"active_clients": len(active_vectors), "stragglers": int(stragglers or 0), "lr": float(lr)}
-
-    @staticmethod
-    def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-        if not rows:
-            return
-        with path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-            writer.writeheader()
-            writer.writerows(rows)
+        _write_csv(self.out / "train_rounds.csv", self.train_history)
+        self._save_checkpoint(global_round, parameters)
+        return parameters, {
+            "active_clients": successful,
+            "missing_clients": missing,
+            "examples": examples,
+        }

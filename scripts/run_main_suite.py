@@ -2,13 +2,18 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import os
-import shutil
 import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+from lightdp_fl.flower_cli import (
+    collect_results,
+    find_flower_cli,
+    run_flower_app,
+    serialize_run_config,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNS_DIR = PROJECT_ROOT / "results" / "experiments"
@@ -34,9 +39,10 @@ def verify_completed_run(tag: str, rounds: int) -> None:
     history_path = run_dir / "history.csv"
     train_rounds_path = run_dir / "train_rounds.csv"
     log_path = run_dir / "training.log"
+    final_metrics_path = run_dir / "final_metrics.json"
     if not all(
         path.is_file()
-        for path in (config_path, history_path, train_rounds_path, log_path)
+        for path in (config_path, history_path, train_rounds_path, log_path, final_metrics_path)
     ):
         raise RuntimeError(
             f"Flower returned without creating all required run records under {run_dir}; "
@@ -48,6 +54,7 @@ def verify_completed_run(tag: str, rounds: int) -> None:
         completed_rounds = [int(row["round"]) for row in csv.DictReader(history_file)]
     with train_rounds_path.open(newline="", encoding="utf-8") as train_file:
         train_rows = list(csv.DictReader(train_file))
+    final_metrics = json.loads(final_metrics_path.read_text(encoding="utf-8"))
     expected_rounds = list(range(rounds + 1))
     machine_id = config.get("machine_id")
     if (
@@ -67,6 +74,8 @@ def verify_completed_run(tag: str, rounds: int) -> None:
         raise RuntimeError(
             f"Run {tag} recorded {len(train_rows)} successful aggregation rounds; expected {rounds}"
         )
+    if final_metrics.get("round") != rounds or final_metrics.get("test_evaluations") != 1:
+        raise RuntimeError(f"Run {tag} is missing its single final test evaluation")
     failures = sum(int(row["failures"]) for row in train_rows)
     active_clients = min(int(row["active_clients"]) for row in train_rows)
     if failures or active_clients <= 0:
@@ -76,44 +85,68 @@ def verify_completed_run(tag: str, rounds: int) -> None:
         )
 
 def main():
-    p=argparse.ArgumentParser(description="Run the main Flower experiments matching the source notebook.")
+    p=argparse.ArgumentParser(description="Run FedAvg and its client-update privacy research variants.")
     p.add_argument("--rounds",type=int,default=8,help="Executed source results used 8 rounds.")
+    p.add_argument(
+        "--algorithm", choices=("fedavg", "clipped_fedavg"),
+        default="fedavg",
+        help="fedavg is local SGD; clipped_fedavg clips per-example gradients during local SGD.",
+    )
+    p.add_argument(
+        "--partition-method", choices=("iid", "label_shards", "dirichlet"), default="iid",
+        help="Client data partition. Dirichlet uses --dirichlet-alpha.",
+    )
+    p.add_argument("--dirichlet-alpha", type=float, default=0.5)
     p.add_argument(
         "--epsilon", type=float, choices=(3.0, 6.0, 9.0),
         help="Run the no-DP baseline and the three private methods at this epsilon.",
     )
     p.add_argument("--run-id", help="Optional output prefix. Defaults to the current UTC timestamp.")
     p.add_argument("--gpu", action="store_true", help="Use the CUDA simulation profile (requires CUDA-enabled PyTorch).")
-    p.add_argument("--stream",action="store_true",default=True)
+    p.add_argument(
+        "--gpu-fraction", choices=("1.0", "0.5", "0.25"), default="1.0",
+        help="Per-client GPU scheduling reservation for a one-GPU throughput pilot; monitor VRAM.",
+    )
     args=p.parse_args()
+    if not args.gpu and args.gpu_fraction != "1.0":
+        p.error("--gpu-fraction requires --gpu")
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     runs = RUNS if args.epsilon is None else [
         RUNS[0], *(run for run in RUNS[1:] if run[1] == args.epsilon)
     ]
-    federation = "local-simulation-gpu" if args.gpu else "local-simulation-suite"
+    gpu_profiles = {
+        "1.0": "local-simulation-gpu",
+        "0.5": "local-simulation-gpu-half",
+        "0.25": "local-simulation-gpu-quarter",
+    }
+    federation = gpu_profiles[args.gpu_fraction] if args.gpu else "local-simulation-suite"
     device = "cuda" if args.gpu else "auto"
-    # Keep the venv path lexical: resolving its Python symlink can jump back to
-    # the base Conda interpreter and select that environment's Flower tools.
-    flwr = Path(sys.executable).absolute().with_name("flwr")
-    if not flwr.is_file():
-        found_flwr = shutil.which("flwr")
-        if found_flwr is None:
-            p.error(
-                f"Could not find the Flower CLI for {sys.executable}. Activate the project "
-                "environment or install the project before running this script."
-            )
-        flwr = Path(found_flwr)
-
-    child_env = os.environ.copy()
-    child_env["PYTHONUNBUFFERED"] = "1"
-    child_env["PATH"] = f"{flwr.parent}{os.pathsep}{child_env.get('PATH', '')}"
+    try:
+        flower_cli = find_flower_cli()
+    except RuntimeError as exc:
+        p.error(str(exc))
     for index, (method,eps,tag) in enumerate(runs, start=1):
-        cfg=(f'method="{method}" epsilon={eps} tag="{run_id}_{tag}" num-clients=50 num-server-rounds={args.rounds} '
-             f'max-colluders=10 max-stragglers=10 max-records-per-client=0 microbatch=32 non-iid=false device="{device}"')
+        cfg = serialize_run_config(
+            {
+                "method": method,
+                "training-algorithm": args.algorithm,
+                "epsilon": eps,
+                "tag": f"{run_id}_{tag}",
+                "num-clients": 50,
+                "num-server-rounds": args.rounds,
+                "max-colluders": 10,
+                "max-stragglers": 10,
+                "max-records-per-client": 0,
+                "client-update-clip": 1.0,
+                "simulate-stragglers": True,
+                "partition-method": args.partition_method,
+                "dirichlet-alpha": args.dirichlet_alpha,
+                "validation-fraction": 0.1,
+                "device": device,
+            }
+        )
         # Avoid CLI federation overrides: Flower currently replaces the full
         # nested `options` table, which drops backend GPU reservations.
-        cmd=[str(flwr),"run",".",federation,"--run-config",cfg]
-        if args.stream: cmd.append("--stream")
         started = time.monotonic()
         print(
             f"\nRUN {index}/{len(runs)} START: method={method}, epsilon={eps:g}, "
@@ -121,7 +154,9 @@ def main():
             flush=True,
         )
         try:
-            subprocess.run(cmd, check=True, cwd=PROJECT_ROOT, env=child_env)
+            run_flower_app(
+                federation, run_config=cfg, cwd=PROJECT_ROOT, cli=flower_cli
+            )
             verify_completed_run(f"{run_id}_{tag}", args.rounds)
         except subprocess.CalledProcessError as exc:
             print(
@@ -143,11 +178,6 @@ def main():
             flush=True,
         )
     print("Collecting results for completed runs...", flush=True)
-    subprocess.run(
-        [sys.executable, str(PROJECT_ROOT / "scripts/collect_results.py")],
-        check=True,
-        cwd=PROJECT_ROOT,
-        env=child_env,
-    )
+    collect_results(cwd=PROJECT_ROOT)
 
 if __name__=="__main__": main()

@@ -1,9 +1,19 @@
+# Canonical plain FedAvg baseline for the CIFAR-10 application.
 method = "no_dp"
-tag = "No_DP"
+training-algorithm = "fedavg"
+client-update-clip = 1.0
+partition-method = "iid"
+dirichlet-alpha = 0.5
+validation-fraction = 0.1
+tag = "auto"
+git-track-results = true
 num-clients = 50
-num-server-rounds = 8
-max-colluders = 10
-max-stragglers = 10
+num-server-rounds = 30
+epsilon = 0.0
+fraction-fit = 1.0
+local-epochs = 1
+batch-size = 32
+local-learning-rate = 0.01
+local-momentum = 0.9
 max-records-per-client = 0
-microbatch = 32
-non-iid = false
+use-pretrained = true

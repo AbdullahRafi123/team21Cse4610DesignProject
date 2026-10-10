@@ -16,7 +16,7 @@ Use smoke runs only to verify software operation. Label exploratory sweeps as ex
 
 ## 2. Make results reproducible
 
-Each run must retain its exact effective configuration and provenance in `results/experiments/<machine-id>/<tag>/`. Run outputs and resumable checkpoints are machine-local; do not continue or copy a checkpoint to another machine. Keep the run tag unique on each machine and record:
+Each run must retain its exact effective configuration and provenance in `results/experiments/<machine-id>/<tag>/`. The default `tag = "auto"` generates a UTC and machine-labelled unique run ID. Completed runs automatically stage their canonical records with Git when the output directory is inside a Git checkout; this stages files but does not commit them. Run outputs and resumable checkpoints are machine-local; do not continue or copy a checkpoint to another machine. Keep explicit run tags unique on each machine and record:
 
 - Git commit/revision, code changes, Python and dependency versions, operating system, hardware, and accelerator details when relevant.
 - Dataset source/version, license, split and partition procedure, preprocessing, and any downloaded or pretrained assets and their version.
@@ -37,6 +37,10 @@ Use the provided configuration and scripts as the canonical path. Do not edit ge
 ## 4. Document data, models, and limits
 
 The active project uses CIFAR-10 and can use torchvision's pretrained ResNet-18 weights. Cite the [CIFAR-10 dataset and its recommended technical report](https://www.cs.toronto.edu/~kriz/cifar.html) and the exact [torchvision ResNet-18 weight variant](https://docs.pytorch.org/vision/main/models/generated/torchvision.models.resnet18.html) used. Record the license/terms and any preprocessing. A dependency or pretrained checkpoint is not automatically redistributable just because it downloads successfully.
+
+Use a validation split for per-round model selection or early stopping. If the test split is inspected repeatedly, including at every communication round, document that exposure and do not present the best observed test round as an unbiased final test result. Prefer a predeclared selection rule and a final test evaluation after selection.
+
+Name the federated update algorithm precisely. Plain `fedavg` performs client-local SGD and example-count-weighted model averaging, following the established FedAvg baseline. Flower is the orchestration framework, not the learning algorithm. `clipped_fedavg` clips per-example gradients during local SGD and keeps example-count-weighted aggregation; clipping alone is not differential privacy. This is the maintained clipping research extension. The prior single clipped-gradient-per-client method with server momentum has been removed from active code; its archived runs and notebook records remain historical and must not be relabeled as FedAvg. The privacy research variants train locally, then clip and perturb each client's model delta before the server uniformly averages participating updates. This private aggregation rule is not example-count-weighted FedAvg. The existing privacy covariance/accounting code has been adapted to client-update sensitivity but still requires independent derivation and review; do not present its reported epsilon as a validated formal guarantee. The project follows a recognized baseline workflow but does not claim state-of-the-art performance or validated privacy guarantees.
 
 Preserve the current scope statements: `lightdp` simulates pairwise masks with matching seeds; it is not a key-exchange implementation. `smpc_dp` is an ideal secure-aggregation baseline, not a cryptographic transport implementation. Reconstruction conclusions apply only to the documented attack, inputs, and threat model. Do not generalize beyond measured evidence.
 
@@ -63,3 +67,5 @@ Do not label an experiment or paper artifact publication-ready until all applica
 ## Project status note
 
 Archived notebook results are historical records. A successful smoke run demonstrates that the application starts and writes logs; it does not reproduce the paper-style findings. The existing measured report must not be presented as a current independent replication without rerunning its complete protocol and preserving the resulting provenance.
+
+The four 30-round runs tagged `20261009T184343833086Z_*` completed but are exploratory: each method has one seed, the test split was evaluated each round, every run config records a dirty worktree, and the LightDP run records a different Git revision. Accuracy peaked around rounds 12–13 and declined by round 30. See [the dated run analysis](EXPERIMENT_ANALYSIS_2026-10-10.md); do not claim a privacy-method ranking from these runs.

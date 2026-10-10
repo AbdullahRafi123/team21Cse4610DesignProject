@@ -37,6 +37,12 @@ def main() -> None:
             train_rounds.append(train)
 
         last = history.iloc[-1].to_dict()
+        final_metrics_path = folder / "final_metrics.json"
+        final_metrics = (
+            json.loads(final_metrics_path.read_text(encoding="utf-8"))
+            if final_metrics_path.is_file()
+            else {}
+        )
         last.update(
             {
                 "run": run_key,
@@ -46,13 +52,24 @@ def main() -> None:
                 "machine_id": config.get("machine_id"),
                 "hostname": config.get("hostname"),
                 "method": config["method"],
+                "training_algorithm": config.get("training_algorithm", "legacy_unknown"),
+                "partition_method": config.get("partition_method", "legacy_unknown"),
+                "client_data_mode": config.get("client_data_mode", "legacy_unknown"),
+                "dirichlet_alpha": config.get("dirichlet_alpha"),
+                "validation_fraction": config.get("validation_fraction"),
+                "local_epochs": config.get("local_epochs"),
+                "batch_size": config.get("batch_size"),
+                "local_learning_rate": config.get("local_learning_rate"),
                 "epsilon_target": config.get("epsilon"),
                 "num_clients": config["num_clients"],
                 "max_colluders": config["max_colluders"],
                 "max_stragglers": config["max_stragglers"],
                 "clip": config["clip"],
+                "client_update_clip": config.get("client_update_clip"),
+                "privacy_calibration": config.get("privacy_calibration"),
                 "learning_rate": config["learning_rate"],
                 "started_at_utc": config.get("started_at_utc"),
+                **final_metrics,
             }
         )
         rows.append(last)
@@ -71,14 +88,15 @@ def main() -> None:
             SUMMARY_DIR / "training_rounds.csv", index=False
         )
 
-    main_runs = final[final["tag"].str.contains("(?:No_DP|Vanilla_local_noise_adding_eps|SMPC(?:_D|\\+D)P_eps|LightDP_eps)", regex=True)]
+    main_runs = final[final["tag"].str.contains("(?:FedAvg|No_DP|Vanilla_local_noise_adding_eps|SMPC(?:_D|\\+D)P_eps|LightDP_eps)", regex=True)]
     if not main_runs.empty:
         figure, axis = plt.subplots(figsize=(11, 6))
         for _, run in main_runs.iterrows():
             values = all_history[all_history["run"] == run["run"]]
-            axis.plot(values["round"], values["accuracy"], marker="o", label=run["tag"])
+            metric = "val_accuracy" if "val_accuracy" in values else "accuracy"
+            axis.plot(values["round"], values[metric], marker="o", label=run["tag"])
         axis.set_xlabel("Communication round")
-        axis.set_ylabel("Test accuracy (%)")
+        axis.set_ylabel("Recorded evaluation accuracy (%)")
         axis.grid(alpha=0.25)
         axis.legend(fontsize=7, ncol=2)
         figure.tight_layout()

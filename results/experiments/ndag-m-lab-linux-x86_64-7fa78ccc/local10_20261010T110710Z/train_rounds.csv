@@ -1,0 +1,2 @@
+round,active_clients,missing_clients,examples,training_algorithm,aggregation,privacy_method,client_update_clip,mean_preclip_update_norm,clients_clipped,local_epochs,learning_rate,mean_train_loss,mean_client_local_seconds,failures
+1,10,0,50,fedavg,uniform_client_mean,vanilla_dp,1.0,0.008356209890916944,0,1,0.01,2.303469944000244,0.263150733600196,0

@@ -3,47 +3,21 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import fields
 import json
 from pathlib import Path
-import subprocess
 
+from lightdp_fl.config import RunConfig
+from lightdp_fl.flower_cli import run_flower_app, serialize_run_config
 from lightdp_fl.run_tracking import machine_id
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_KEYS = {
-    "seed": "seed",
-    "num_clients": "num-clients",
-    "num_server_rounds": "num-server-rounds",
-    "max_colluders": "max-colluders",
-    "max_stragglers": "max-stragglers",
-    "epsilon": "epsilon",
-    "delta": "delta",
-    "clip": "clip",
-    "learning_rate": "learning-rate",
-    "momentum": "momentum",
-    "image_size": "image-size",
-    "feature_batch": "feature-batch",
-    "microbatch": "microbatch",
-    "method": "method",
-    "non_iid": "non-iid",
-    "max_records_per_client": "max-records-per-client",
-    "use_pretrained": "use-pretrained",
-    "cache_dir": "cache-dir",
-    "output_dir": "output-dir",
-    "tag": "tag",
-    "device": "device",
+    field.name: field.name.replace("_", "-")
+    for field in fields(RunConfig)
+    if field.name != "resume"
 }
-
-
-def _toml_value(value: object) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, str):
-        return json.dumps(value)
-    if isinstance(value, (int, float)):
-        return str(value)
-    raise TypeError(f"Unsupported run-config value: {value!r}")
 
 
 def main() -> None:
@@ -66,8 +40,7 @@ def main() -> None:
             run_dir = legacy_dir
     metadata_path = run_dir / "run_config.json"
     checkpoints = (
-        run_dir / "checkpoints" / "server_checkpoint.pt",
-        run_dir / "server_checkpoint.pt",  # legacy layout
+        run_dir / "checkpoints" / "fedavg_server_checkpoint.pt",
     )
     if not metadata_path.is_file():
         raise SystemExit(f"No run metadata found at {metadata_path}")
@@ -85,21 +58,23 @@ def main() -> None:
             f"Recorded machine_id={metadata.get('machine_id')!r}; "
             f"current machine_id={current_machine_id!r}. Start a new run here."
         )
-    config = " ".join(
-        f"{key}={_toml_value(metadata[field])}"
-        for field, key in CONFIG_KEYS.items()
-        if field in metadata
+    config = serialize_run_config(
+        {
+            key: metadata[field]
+            for field, key in CONFIG_KEYS.items()
+            if field in metadata
+        }
     )
-    config += " resume=true"
+    config = f"{config} resume=true"
     num_clients = int(metadata["num_clients"])
     federation = "local-simulation-gpu" if args.gpu else "local-simulation"
-    command = [
-        "flwr", "run", ".", federation, "--stream",
-        "--run-config", config,
-        "--federation-config", f"options.num-supernodes={num_clients}",
-    ]
     print(f"Resuming tag={args.tag} from round checkpoint: {checkpoint}", flush=True)
-    subprocess.run(command, check=True, cwd=PROJECT_ROOT)
+    run_flower_app(
+        federation,
+        run_config=config,
+        federation_config=f"options.num-supernodes={num_clients}",
+        cwd=PROJECT_ROOT,
+    )
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ if [[ ! -x "$VENV_DIR/bin/flwr" ]]; then
   bash "$PROJECT_ROOT/setup/initialize.sh" || exit $?
 fi
 
+export PATH="$VENV_DIR/bin:$PATH"
 "$VENV_DIR/bin/flwr" run . --stream
 status=$?
 if [[ -t 0 ]]; then

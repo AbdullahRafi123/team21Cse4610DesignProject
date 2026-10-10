@@ -1,9 +1,14 @@
 from __future__ import annotations
 import argparse
-import subprocess
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+from lightdp_fl.flower_cli import (
+    collect_results,
+    find_flower_cli,
+    run_flower_app,
+    serialize_run_config,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -12,13 +17,10 @@ SWEEPS=[
     ("clients_25",{"num-clients":25,"max-colluders":10,"max-stragglers":10}),
     ("clients_100",{"num-clients":100,"max-colluders":10,"max-stragglers":10}),
     ("colluders_20",{"max-colluders":20}),("stragglers_20",{"max-stragglers":20}),
-    ("clip_0.5",{"clip":0.5}),("lr_0.05",{"learning-rate":0.05}),("nonIID",{"non-iid":True}),
+    ("client_update_clip_0.5",{"client-update-clip":0.5}),
+    ("local_lr_0.005",{"local-learning-rate":0.005}),
+    ("nonIID_dirichlet",{"partition-method":"dirichlet"}),
 ]
-
-def toml(v):
-    if isinstance(v,bool): return "true" if v else "false"
-    if isinstance(v,str): return f'"{v}"'
-    return str(v)
 
 def main():
     p=argparse.ArgumentParser()
@@ -27,15 +29,24 @@ def main():
     p.add_argument("--gpu", action="store_true", help="Use the CUDA simulation profile (requires CUDA-enabled PyTorch).")
     args=p.parse_args()
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    federation = "local-simulation-gpu" if args.gpu else "local-simulation"
     device = "cuda" if args.gpu else "auto"
+    flower_cli = find_flower_cli()
     for name,changes in SWEEPS:
-        base={"method":"lightdp","epsilon":6.0,"tag":f"{run_id}_Sweep_{name}","num-clients":50,"num-server-rounds":args.rounds,
-              "max-colluders":10,"max-stragglers":10,"max-records-per-client":0,"microbatch":32,"non-iid":False,"device":device}
+        base={"method":"lightdp","training-algorithm":"fedavg","epsilon":6.0,
+              "tag":f"{run_id}_Sweep_{name}","num-clients":50,"num-server-rounds":args.rounds,
+              "max-colluders":10,"max-stragglers":10,"max-records-per-client":0,
+              "client-update-clip":1.0,"simulate-stragglers":True,
+              "partition-method":"iid","dirichlet-alpha":0.5,
+              "validation-fraction":0.1,"device":device}
         base.update(changes);N=int(base["num-clients"])
-        cfg=" ".join(f'{k}={toml(v)}' for k,v in base.items())
-        cmd=["flwr","run",".",federation,"--run-config",cfg,"--federation-config",f"options.num-supernodes={N}","--stream"]
-        print("\nRUNNING:"," ".join(cmd),flush=True);subprocess.run(cmd,check=True,cwd=PROJECT_ROOT)
-    subprocess.run([sys.executable,str(PROJECT_ROOT / "scripts/collect_results.py")],check=True,cwd=PROJECT_ROOT)
+        cfg=serialize_run_config(base)
+        profile_key = "gpu" if args.gpu else "suite"
+        if N == 50:
+            federation = "local-simulation-gpu" if args.gpu else "local-simulation-suite"
+        else:
+            federation = f"local-simulation-{profile_key}-{N}"
+        print(f"\nRUNNING: federation={federation}, tag={base['tag']}",flush=True)
+        run_flower_app(federation,run_config=cfg,cwd=PROJECT_ROOT,cli=flower_cli)
+    collect_results(cwd=PROJECT_ROOT)
 
 if __name__=="__main__":main()

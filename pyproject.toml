@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "lightdp-flower"
 version = "1.0.0"
-description = "Flower implementation of the LightDP-FL CIFAR-10 comparison notebook"
+description = "Flower CIFAR-10 federated learning applications and privacy research extensions"
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "CSE4610 Team 21" }]
@@ -52,34 +52,55 @@ publisher = "team21"
 serverapp = "lightdp_fl.server_app:app"
 clientapp = "lightdp_fl.client_app:app"
 
-# Safe smoke-test defaults. The source notebook's measured run used 50 clients,
-# 8 main rounds and 3 sweep rounds. Use configs/full_lightdp.toml or the suite scripts.
+# Safe two-round smoke run using standard FedAvg. Use configs/full_lightdp.toml
+# to exercise the LightDP research variant on locally trained FedAvg updates.
 [tool.flwr.app.config]
 seed = 2026
 num-clients = 5
 num-server-rounds = 2
 max-colluders = 1
 max-stragglers = 1
-epsilon = 6.0
+epsilon = 0.0
 delta = 0.00001
 clip = 1.0
-learning-rate = 1.0
-momentum = 0.9
 image-size = 224
 feature-batch = 128
-microbatch = 16
-method = "lightdp"
-non-iid = false
+method = "no_dp"
+training-algorithm = "fedavg"
+client-update-clip = 1.0
+partition-method = "iid"
+dirichlet-alpha = 0.5
+client-data-mode = "partitioned_cifar10"
+simulate-stragglers = true
+validation-fraction = 0.1
+local-epochs = 1
+batch-size = 32
+local-learning-rate = 0.01
+local-momentum = 0.9
+fraction-fit = 1.0
 max-records-per-client = 64
 use-pretrained = true
 cache-dir = ".cache/lightdp_flower"
 output-dir = "results/experiments"
-tag = "smoke_lightdp"
+tag = "auto"
+git-track-results = true
 device = "auto"
 resume = false
 
 [tool.flwr.federations]
 default = "local-simulation"
+
+# Same-host deployment-engine check. For machines on a network, change the
+# address and use the TLS profile below instead of this insecure profile.
+[tool.flwr.federations.network-demo]
+address = "127.0.0.1:9093"
+insecure = true
+
+# Multi-machine profile: place the CA certificate at this path and replace
+# the address with the SuperLink host. Never use insecure=true on an open network.
+[tool.flwr.federations.network-tls]
+address = "127.0.0.1:9093"
+root-certificates = "./certificates/ca.crt"
 
 [tool.flwr.federations.local-simulation]
 options.num-supernodes = 5
@@ -88,6 +109,13 @@ options.backend.client-resources.num-cpus = 1
 # running on a machine without a CUDA GPU.
 options.backend.client-resources.num-gpus = 0
 
+# Five-client CUDA smoke profile. One full GPU reservation lets one client
+# train at a time, avoiding overlapping CUDA workers during device validation.
+[tool.flwr.federations.local-simulation-gpu-smoke]
+options.num-supernodes = 5
+options.backend.client-resources.num-cpus = 1
+options.backend.client-resources.num-gpus = 1.0
+
 # Main experiment suite: 50 CPU clients while preserving the five-client
 # lightweight default above for direct Flower smoke runs.
 [tool.flwr.federations.local-simulation-suite]
@@ -95,8 +123,40 @@ options.num-supernodes = 50
 options.backend.client-resources.num-cpus = 1
 options.backend.client-resources.num-gpus = 0
 
+[tool.flwr.federations.local-simulation-suite-25]
+options.num-supernodes = 25
+options.backend.client-resources.num-cpus = 1
+options.backend.client-resources.num-gpus = 0
+
+[tool.flwr.federations.local-simulation-suite-100]
+options.num-supernodes = 100
+options.backend.client-resources.num-cpus = 1
+options.backend.client-resources.num-gpus = 0
+
 # CUDA profile for the 50-client main experiment suite.
 [tool.flwr.federations.local-simulation-gpu]
 options.num-supernodes = 50
+options.backend.client-resources.num-cpus = 1
+options.backend.client-resources.num-gpus = 1.0
+
+# Opt-in throughput pilots for one GPU. Flower allocations schedule workers;
+# they are not VRAM isolation or guarantees of safe concurrent execution.
+[tool.flwr.federations.local-simulation-gpu-half]
+options.num-supernodes = 50
+options.backend.client-resources.num-cpus = 1
+options.backend.client-resources.num-gpus = 0.5
+
+[tool.flwr.federations.local-simulation-gpu-quarter]
+options.num-supernodes = 50
+options.backend.client-resources.num-cpus = 1
+options.backend.client-resources.num-gpus = 0.25
+
+[tool.flwr.federations.local-simulation-gpu-25]
+options.num-supernodes = 25
+options.backend.client-resources.num-cpus = 1
+options.backend.client-resources.num-gpus = 1.0
+
+[tool.flwr.federations.local-simulation-gpu-100]
+options.num-supernodes = 100
 options.backend.client-resources.num-cpus = 1
 options.backend.client-resources.num-gpus = 1.0

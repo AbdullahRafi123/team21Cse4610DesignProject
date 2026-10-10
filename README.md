@@ -1,178 +1,85 @@
-# LightDP-FL CIFAR-10 experiments
+# Flower FedAvg and privacy research extensions
 
-This repository contains a Flower simulation of the LightDP federated learning comparison, its experiment notebooks, and archived results. The active implementation is the `src/lightdp_fl/` package.
+This repository contains Flower applications for CIFAR-10 federated learning.
+The maintained implementation is in `src/lightdp_fl/`; archived notebooks and
+results are historical research records.
 
-## Set up after cloning
+The training baseline now follows the standard federated-averaging workflow:
+Flower coordinates client rounds, each client trains locally for configured
+epochs, and the server aggregates client model weights weighted by local
+example counts. The project also retains per-example clipped local training
+and client-update privacy methods as separately named research extensions.
+This is a research-aligned baseline and experiment framework, not a claim that
+the model or privacy mechanisms are state of the art.
 
-Requires Python 3.10–3.13 and internet access for the first CIFAR-10 and pretrained ResNet downloads. The initializers prefer Python 3.12 when available and accept a `PYTHON` override to select another supported interpreter.
+## Clone and run
+
+On Linux or macOS:
 
 ```bash
 git clone https://github.com/AbdullahRafi123/team21Cse4610DesignProject.git
 cd team21Cse4610DesignProject
-```
-
-Run the platform initializer from the repository root. On macOS and Linux:
-
-```bash
 bash setup/initialize.sh
-```
-
-On Windows, install Python 3.10–3.13 and Git, then run:
-
-```powershell
-.\setup\initialize.bat
-```
-
-Each initializer creates a virtual environment if one does not already exist, installs the project and dependencies, and prints the activation command. They do not start training. Windows uses `%USERPROFILE%\.venvs\lightdp-flower-project` by default; macOS/Linux use `~/.venvs/lightdp-flower-project`. Keeping environments outside the checkout avoids paths that can interfere with Ray workers. Activate the environment, then run the quick smoke experiment from the repository root:
-
-```text
+source "$HOME/.venvs/lightdp-flower-project/bin/activate"
 flwr run . --stream
 ```
 
-The first run may download CIFAR-10 and pretrained weights.
+On Windows, clone the repository and run `launchers\run_windows.bat` from the
+clone. The launcher installs the environment if needed and starts the smoke
+run.
 
-To choose a particular supported Python interpreter, set `PYTHON` before running the initializer, for example `PYTHON=python3.11 bash setup/initialize.sh` on macOS/Linux or `set "PYTHON=py -3.13"` before running `setup\initialize.bat` on Windows. Supported versions are 3.10–3.13; an existing environment with a different version is left untouched and the initializer explains how to select a new `VENV_DIR`.
+The default run is a small, two-round, five-client Flower simulation. The
+initializer installs the project in a virtual environment outside the clone;
+the first run may download CIFAR-10 and pretrained ResNet-18 weights. On Linux
+run `./launchers/run_linux.sh`; on macOS run `./launchers/run_macos.command` to
+initialize and launch directly.
+For all setup options and machine deployment, see the [run guide](docs/USAGE.md).
 
-### Click to run
+Completed runs receive a unique UTC, machine-labelled tag and are written to
+`results/experiments/<machine-id>/<tag>/`. The canonical run records are staged
+with `git add` automatically after completion. This does not create a commit;
+review the staged files and commit them when ready.
 
-The launchers initialize the virtual environment if needed, then start the default Flower smoke run and keep the terminal open to show its output:
+## Start here
 
-- Windows: double-click [`launchers/run_windows.bat`](launchers/run_windows.bat).
-- macOS: double-click [`launchers/run_macos.command`](launchers/run_macos.command). If macOS blocks it, open Terminal in the repository and run `bash launchers/run_unix.sh`.
-- Linux: double-click [`launchers/run_linux.sh`](launchers/run_linux.sh) when the file manager is set to run executable scripts, or run `bash launchers/run_unix.sh` in a terminal.
+- [Installation and run guide](docs/USAGE.md): clone, setup, smoke runs, GPU
+  runs, experiment scripts, result locations, and resuming.
+- [Current experiment analysis](docs/EXPERIMENT_ANALYSIS_2026-10-10.md): the
+  completed October 2026 comparison, its limitations, and the recommended
+  follow-up.
+- [Research standards](docs/RESEARCH_STANDARDS.md): protocol, reproducibility,
+  reporting, privacy, and release requirements.
+- [Experiment protocol template](docs/EXPERIMENT_PROTOCOL_TEMPLATE.md): fill
+  this out before confirmatory runs.
+- [Federated method definitions](docs/FEDERATED_METHODS.md): standard FedAvg,
+  retained clipped local-SGD and privacy extensions, partitions, evaluation,
+  and runtime tuning.
+- [Multi-machine deployment guide](docs/USAGE.md#multi-machine-flower-deployment):
+  SuperLink/SuperNode setup and client-local training data.
+- [Results index](results/experiments/README.md): active run artifacts and
+  provenance expectations.
 
-## Experiments
+## Research scope
 
-The default Flower configuration is a small smoke run. The supplied configurations and scripts run the larger comparisons:
+The active application uses CIFAR-10 and torchvision ResNet-18 features. The
+`lightdp` method simulates pairwise masks using matching seeds; it is not
+production cryptography or a key-exchange implementation. `smpc_dp` is an
+idealized secure-aggregation baseline, not a cryptographic transport. Privacy,
+security, and reconstruction claims must stay within the implementation and
+documented threat model. The networked Flower runtime transports client
+updates, but Flower deployment alone does not provide secure aggregation or
+differential privacy.
 
-```bash
-flwr run . local-simulation-suite --stream --run-config configs/full_lightdp.toml
-python scripts/run_main_suite.py
-python scripts/run_sweeps.py
-python scripts/collect_results.py
-```
+Archived notebook outputs are not independent replications of the maintained
+Flower application. A smoke run verifies that the software starts and writes
+records; it does not establish research findings. The October 2026 comparison
+is exploratory and has unresolved evaluation and provenance limitations; see
+its analysis before interpreting the numbers.
 
-### Run on a CUDA GPU (Linux or Windows)
+## Citation and licensing
 
-The default `local-simulation` federation reserves no GPUs, so it remains usable on CPU-only machines. For a CUDA-capable machine, install a CUDA-enabled PyTorch build that matches its NVIDIA driver using the [official PyTorch install selector](https://pytorch.org/get-started/locally/), then verify it from the project environment:
-
-```bash
-python -c 'import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No CUDA GPU")'
-```
-
-The project includes a `local-simulation-gpu` federation profile with 50 supernodes. It reserves one GPU per client worker, limiting the pool to one concurrent worker per GPU to reduce VRAM contention. Compared with the earlier 0.5-GPU profile, this changes concurrency and runtime; record the effective resource setting when comparing timings. Run the full LightDP configuration with the checked-in TOML file:
-
-```bash
-flwr run . local-simulation-gpu --stream \
-  --run-config configs/full_lightdp.toml
-```
-
-For the complete main comparison or sweep suite, pass `--gpu` to the existing scripts:
-
-```bash
-# Four methods at epsilon 6 (no-DP baseline plus the three private methods)
-python scripts/run_main_suite.py --epsilon 6 --gpu
-# Full 10-run main suite and optional sweep suite
-python scripts/run_main_suite.py --gpu
-python scripts/run_sweeps.py --gpu
-```
-
-Use the Python runner for multi-method experiments from PowerShell or other shells. It passes Flower arguments directly, avoiding shell-specific quoting of TOML strings.
-
-After running `setup/initialize.sh` on Linux or `setup/initialize.bat` on Windows, install or replace PyTorch with the CUDA-enabled build selected for that machine in the official PyTorch selector. Do this inside the project virtual environment. The generic project initializer may install a CPU-only PyTorch wheel on some platforms.
-
-The scripts explicitly select CUDA in GPU mode and fail early if CUDA-enabled PyTorch or a visible GPU is missing. GPU reservations are scheduling hints, not VRAM limits. Native Windows simulation support through Ray is experimental; Linux is recommended for GPU simulations.
-
-### Resume an interrupted run
-
-Every completed communication round saves the global parameters and optimizer momentum. Continue
-an interrupted run by tag; the helper reads its recorded configuration and resumes from the latest
-checkpoint:
-
-```bash
-python scripts/resume_run.py --tag my_run
-```
-
-For a run started with the GPU profile, add `--gpu` when resuming: `python scripts/resume_run.py --tag my_run --gpu`.
-
-Keep the experiment settings and total `num-server-rounds` unchanged. A checkpoint already at the
-target round cannot continue training. Runs are machine-local: the resume helper and server reject a
-checkpoint whose machine ID differs from the current machine. Start a fresh run on each machine;
-do not copy checkpoints between machines. Data and pretrained weights can be downloaded again or
-copied from the local cache.
-
-### Benchmark optional training modes
-
-The default training path remains eager FP32. To compare it with available autocast and
-`torch.compile` paths on the current machine, run:
-
-```bash
-python scripts/benchmark_training_modes.py
-```
-
-This uses synthetic inputs and writes timing and relative-error results under
-`results/benchmarks/`. It is a microbenchmark, not evidence that an option improves full-run
-utility or privacy behavior. Record and compare end-to-end experiment outcomes before using a
-different mode in a research run.
-
-Install the optional test dependency and run the focused clipping reference check with:
-
-```bash
-pip install -e '.[test]'
-python -m pytest
-```
-
-Suite and sweep scripts add a UTC timestamp to run names. Outputs are organized under `results/experiments/<machine-id>/<tag>/`:
-
-- `run_config.json` records parameters, a UTC run ID, machine ID, machine-local run number, hostname, OS/architecture, and available CUDA devices.
-- `history.csv` records loss, accuracy, and privacy accounting per round.
-- `train_rounds.csv` records active clients, simulated stragglers, learning rate, and client timing.
-- `training.log` records run start, round summaries, and periodic aggregate client microbatch progress.
-- `client_progress/round_<n>/client_<id>.json` stores the latest microbatch count and status for each client in a round.
-- `checkpoints/server_checkpoint.pt` stores that machine's latest resumable global parameters and momentum.
-- `checkpoints/final_model.pt` stores its final model state; `.pt` files are excluded from Git.
-
-Each new run gets an ID such as `20261009T120000Z_host-linux-x86_64-a1b2c3d4_run0007_9f8e7d6c`. Outputs are partitioned under `results/experiments/<machine-id>/<tag>/`, so equal tags on different machines stay separate when results are collected together. A stable machine ID and its sequence are stored in the user's cache directory (`~/.cache/lightdp_flower/` on Linux/macOS or `%LOCALAPPDATA%\lightdp_flower\` on Windows), so they persist across repository pulls without adding machine-specific state to Git. Resume events record the machine and sequence used to continue a run.
-
-At startup, the server and each client process check `torch.cuda.is_available()`, list visible GPUs, and log the selected device. With `device="auto"` the process uses CUDA when available and otherwise logs that it selected CPU. An explicitly requested CUDA device stops early with a clear error if CUDA is unavailable or the requested GPU index is not visible.
-
-With `flwr run --stream`, each server round now prints progress, average elapsed seconds per completed round, and an approximate remaining-round ETA (`ETA~HH:MM:SS`). The estimate is recalculated after each completed round. It excludes setup before the server starts rounds, such as initial downloads and test-feature preparation; first-run client feature extraction can also make early estimates shift.
-
-The main suite resolves the Flower CLI from the active Python environment, prepends that environment's executable directory so `flower-simulation` and Ray use the same environment, and streams output directly to the terminal. It verifies that each run wrote its configuration and all requested evaluation rounds before reporting completion; a CLI startup error cannot be mistaken for a successful run. During first-run setup, centralized test-feature preparation and each client's local data/feature preparation also print periodic batch updates, so downloads and cache creation remain visible before round progress begins.
-
-During client gradient computation, the server also prints an aggregate microbatch progress bar about every two seconds, including completed and started clients. The same aggregate line is appended to `training.log` every ten seconds. The per-client JSON status files are updated after each microbatch; they report gradient batches, not epochs, because each client computes one gradient update per federated round.
-
-Training logs and small tabular summaries are intentionally Git-trackable for reproducibility. Review and commit the relevant `run_config.json`, `history.csv`, `train_rounds.csv`, and `training.log` files after an experiment. `results/summary/all_runs.csv` includes run ID, machine ID, hostname, and run number so collected results can be compared across machines. Use a distinct `tag` for separate experiments on one machine; machine IDs partition outputs across machines. Local datasets, caches, machine IDs, and run-number counters are excluded from Git.
-
-To pre-download data and model weights without training:
-
-```bash
-python -m lightdp_fl.prepare_data
-```
-
-## Project layout
-
-- `src/lightdp_fl/`: client/server applications, model, data, privacy, training, and aggregation modules.
-- `setup/`: platform initializers and the Windows redundancy-check wrapper.
-- `launchers/`: platform-specific clickable smoke-run entry points plus their shared Unix launcher.
-- `configs/`: full experiment configurations.
-- `scripts/`: experiment runners and result collection.
-- `notebooks/`: methodology and source notebooks; older notebooks are in `notebooks/archive/`.
-- `results/archive/`: retained historical tables, logs, and figures grouped by experiment.
-- `results/experiments/<machine-id>/<tag>/`: machine-partitioned Flower runs and their trackable logs/checkpoint directories.
-
-## Check for repository redundancies
-
-Run `setup\check_redundancies.bat` on Windows or `python scripts/check_redundancies.py` on macOS/Linux. The dependency-free checker reports byte-identical files, repeated top-level Python declarations, and broken local Markdown links. It never removes or edits files; review each finding before changing the repository. Add `--strict` to return a failure exit code when findings exist, or `--include-outputs` to include generated experiment and summary directories.
-
-The `lightdp` method simulates pairwise masks using matching seeds; it is not production key exchange. `smpc_dp` is an ideal secure-aggregation baseline, not a real cryptographic transport implementation. The notebooks document earlier experiments and may not use the active Flower code.
-
-## Research use and citation
-
-Archived measurements are historical notebook outputs. The current smoke configuration checks execution and logging only; it does not reproduce the archived paper-style results. Follow the [research standards](docs/RESEARCH_STANDARDS.md) and record a protocol from the [experiment template](docs/EXPERIMENT_PROTOCOL_TEMPLATE.md) before presenting new confirmatory findings. Repository agents should follow [AGENTS.md](AGENTS.md).
-
-The project uses CIFAR-10 and torchvision's pretrained ResNet-18 weights. Cite the [CIFAR-10 dataset and technical report](https://www.cs.toronto.edu/~kriz/cifar.html) and record the exact [ResNet-18 weight variant](https://docs.pytorch.org/vision/main/models/generated/torchvision.models.resnet18.html) used. Software citation metadata is in [CITATION.cff](CITATION.cff); the full author list and contribution order must be confirmed by the team before a paper release.
-
-## License
-
-The source code is released under the MIT License in [LICENSE](LICENSE). Dataset and pretrained-weight terms remain those of their respective providers.
+See [CITATION.cff](CITATION.cff) for software metadata. Cite CIFAR-10, the exact
+torchvision ResNet-18 weight variant, Flower, ResNet, and other borrowed methods
+or code when reporting work. Confirm dataset and pretrained-weight terms before
+redistributing artifacts. The repository source is MIT licensed; third-party
+assets retain their own terms.

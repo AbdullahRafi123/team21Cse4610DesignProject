@@ -8,6 +8,7 @@ if not exist "%VENV_DIR%\Scripts\flwr.exe" (
   if errorlevel 1 goto :failed
 )
 
+set "PATH=%VENV_DIR%\Scripts;%PATH%"
 "%VENV_DIR%\Scripts\flwr.exe" run . --stream
 set "RUN_EXIT=%errorlevel%"
 echo.
